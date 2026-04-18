@@ -56,16 +56,29 @@ def calcular_igsm_municipalidad(respuestas: dict, diversificados: list) -> dict:
     """
     Calcula el IGSM total de una municipalidad.
 
-    Metodología CGR (replicada con 100% exactitud):
-    1. Se usan TODOS los indicadores respondidos (básicos + diversificados aplicables)
-    2. Pesos por indicador = peso_etapa / n_total_indicadores_en_etapa_global
+    Metodología CGR:
+    1. Solo se incluyen servicios donde la municipalidad tiene al menos una respuesta
+    2. Pesos por indicador = peso_etapa / n_total_indicadores_en_etapa (solo servicios con respuestas)
     3. Score = Σ(valor_ind × peso_ind)
 
     Retorna dict con score_total, nivel, detalle por servicio y etapa.
     """
     from data.indicators import get_servicios_para_municipalidad
 
-    servicios_aplicables = get_servicios_para_municipalidad(diversificados)
+    servicios_candidatos = get_servicios_para_municipalidad(diversificados)
+
+    # Solo incluir servicios donde la municipalidad tiene al menos una respuesta
+    codigos_respondidos = set(respuestas.keys())
+    servicios_aplicables = {}
+    for serv_nombre, serv_data in servicios_candidatos.items():
+        eje_nombre = serv_data["eje"]
+        codigos_serv = set()
+        for etapa_inds in ESTRUCTURA_IGSM[eje_nombre]["servicios"][serv_nombre]["etapas"].values():
+            for ind in etapa_inds:
+                if ind["tipo"] != TIPO_INFORMATIVO:
+                    codigos_serv.add(ind["codigo"])
+        if codigos_serv & codigos_respondidos:  # tiene al menos una respuesta
+            servicios_aplicables[serv_nombre] = serv_data
 
     # Contar indicadores totales por etapa (para calcular pesos globales)
     n_por_etapa = {"Planificación": 0, "Ejecución": 0, "Evaluación": 0}
