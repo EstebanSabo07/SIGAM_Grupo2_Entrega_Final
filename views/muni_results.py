@@ -3,12 +3,13 @@
 import streamlit as st
 from components.ui import page_header, kpi_card, nivel_badge, alert_box
 from components.charts import radar_ejes, historico_lineas, comparacion_servicios_bar
-from data.db_layer import get_municipalidad_data, get_ranking
+from data.db_layer import get_ranking
 from data.indicators import clasificar_nivel
 
 def show():
     nombre = st.session_state.get("municipalidad", "Municipalidad")
-    data   = get_municipalidad_data(nombre)
+    ranking = get_ranking()
+    data = next((m for m in ranking if m["municipalidad"] == nombre), None)
 
     if not data:
         st.error("No se encontraron resultados.")
@@ -69,7 +70,6 @@ def show():
         # Posición en ranking (contexto)
         st.markdown("---")
         st.markdown("##### Tu posición en el ranking nacional")
-        ranking = get_ranking()
         pos = data["posicion"]
         munis_vecinas = []
         for m in ranking:

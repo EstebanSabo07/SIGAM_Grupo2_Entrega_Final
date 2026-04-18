@@ -3,11 +3,12 @@
 import streamlit as st
 from components.ui import page_header, kpi_card, nivel_badge, alert_box, gauge_score
 from components.charts import historico_lineas, comparacion_servicios_bar, radar_ejes
-from data.mock_data import get_municipalidad_data
+from data.db_layer import get_ranking
 
 def show():
     nombre = st.session_state.get("municipalidad", "Municipalidad")
-    data   = get_municipalidad_data(nombre)
+    ranking = get_ranking()
+    data = next((m for m in ranking if m["municipalidad"] == nombre), None)
 
     if not data:
         st.error("No se encontraron datos para esta municipalidad.")
