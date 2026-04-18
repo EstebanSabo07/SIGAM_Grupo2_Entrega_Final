@@ -43,7 +43,7 @@ MUNICIPALIDADES = [
     {"codigo": "301", "nombre": "Cartago",           "provincia": "Cartago",    "region": "Central",    "lat": 9.8645,  "lon": -83.9197, "diversificados": ["agua_potable"]},
     {"codigo": "302", "nombre": "Paraíso",           "provincia": "Cartago",    "region": "Central",    "lat": 9.8369,  "lon": -83.8651, "diversificados": []},
     {"codigo": "303", "nombre": "La Unión",          "provincia": "Cartago",    "region": "Central",    "lat": 9.9131,  "lon": -83.9814, "diversificados": []},
-    {"codigo": "304", "nombre": "Jiménez",           "provincia": "Cartago",    "region": "Huetar Caribe","lat": 9.7792, "lon": -83.7367, "diversificados": []},
+    {"codigo": "304", "nombre": "Jiménez",           "provincia": "Cartago",    "region": "Central",    "lat": 9.7792,  "lon": -83.7367, "diversificados": []},
     {"codigo": "305", "nombre": "Turrialba",         "provincia": "Cartago",    "region": "Huetar Caribe","lat": 9.9021, "lon": -83.6814, "diversificados": ["agua_potable"]},
     {"codigo": "306", "nombre": "Alvarado",          "provincia": "Cartago",    "region": "Central",    "lat": 9.8831,  "lon": -83.8403, "diversificados": []},
     {"codigo": "307", "nombre": "Oreamuno",          "provincia": "Cartago",    "region": "Central",    "lat": 9.8786,  "lon": -83.8900, "diversificados": []},
@@ -84,6 +84,7 @@ MUNICIPALIDADES = [
     {"codigo": "610", "nombre": "Corredores",        "provincia": "Puntarenas", "region": "Brunca",     "lat": 8.5369,  "lon": -83.0333, "diversificados": []},
     {"codigo": "611", "nombre": "Garabito",          "provincia": "Puntarenas", "region": "Pacífico Central","lat": 9.5908, "lon": -84.6633, "diversificados": ["zmt"]},
     {"codigo": "612", "nombre": "Monteverde",        "provincia": "Puntarenas", "region": "Pacífico Central","lat": 10.3011,"lon": -84.8231, "diversificados": ["zmt"]},
+    {"codigo": "613", "nombre": "Puerto Jiménez",   "provincia": "Puntarenas", "region": "Brunca",     "lat": 8.5333,  "lon": -83.3000, "diversificados": []},
     # Limón
     {"codigo": "701", "nombre": "Limón",             "provincia": "Limón",      "region": "Huetar Caribe","lat": 10.0000, "lon": -83.0333, "diversificados": ["agua_potable"]},
     {"codigo": "702", "nombre": "Pococí",            "provincia": "Limón",      "region": "Huetar Caribe","lat": 10.4497, "lon": -83.7408, "diversificados": []},
@@ -91,7 +92,6 @@ MUNICIPALIDADES = [
     {"codigo": "704", "nombre": "Talamanca",         "provincia": "Limón",      "region": "Huetar Caribe","lat": 9.5833,  "lon": -82.9286, "diversificados": ["zmt"]},
     {"codigo": "705", "nombre": "Matina",            "provincia": "Limón",      "region": "Huetar Caribe","lat": 10.0731, "lon": -83.3347, "diversificados": []},
     {"codigo": "706", "nombre": "Guácimo",           "provincia": "Limón",      "region": "Huetar Caribe","lat": 10.2228, "lon": -83.6822, "diversificados": []},
-    {"codigo": "707", "nombre": "Valle La Estrella", "provincia": "Limón",      "region": "Huetar Caribe","lat": 9.7831,  "lon": -82.9564, "diversificados": []},
 ]
 
 # Códigos de acceso por municipalidad (en producción vendrían de Firestore)
