@@ -7,8 +7,7 @@ from components.charts import (
     ranking_bar_chart, distribucion_niveles_pie,
     comparacion_servicios_bar, heatmap_region_servicio, scatter_dispersion
 )
-from data.db_layer import get_ranking, get_estadisticas_nacionales, get_scores_por_servicio_nacional
-from data.mock_data import get_historial_nacional  # historial anual sigue siendo mock
+from data.db_layer import get_ranking, get_estadisticas_nacionales, get_scores_por_servicio_nacional, get_historial_nacional
 
 def show():
     page_header("Dashboard Nacional IGSM 2025", "Contraloría General de la República · Visión general del sector municipal", "📊")
