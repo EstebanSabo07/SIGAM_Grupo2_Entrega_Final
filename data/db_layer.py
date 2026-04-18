@@ -22,8 +22,82 @@ from database.repositories import (
     save_stage_weights,
     get_national_statistics,
 )
-from data.calculation import calcular_igsm_municipalidad, calcular_consistencia
+from database.session import session_scope
+from database.models import DMIndicator, DMStage, DMService, FactIndicatorResponse, DMMunicipality
+from data.calculation import calcular_consistencia
 from data.indicators import clasificar_nivel, COLORES_NIVEL
+
+
+# ── Cálculo IGSM usando metadatos de la BD (fórmula exacta PT-228) ────────────
+
+def _calcular_igsm_bd(codigo: str, end_date=None) -> dict:
+    """
+    Calcula el IGSM replicando exactamente la metodología del notebook/PT-228:
+      score = 0.50×(Σplan/n_plan) + 0.30×(Σejec/n_ejec) + 0.20×(Σeval/n_eval)
+    Usa los metadatos de etapa directamente de la BD, no de indicators.py.
+    """
+    try:
+        with session_scope() as s:
+            muni_obj = s.query(DMMunicipality).filter(DMMunicipality.code == codigo).first()
+            if not muni_obj:
+                raise ValueError(f"Municipalidad {codigo} no encontrada")
+
+            # Obtener respuestas con etapa y servicio desde la BD
+            rows = (s.query(DMIndicator.code, DMStage.name, DMService.name, FactIndicatorResponse.value)
+                    .join(FactIndicatorResponse, DMIndicator.indicator_id == FactIndicatorResponse.indicator_id)
+                    .join(DMStage, DMIndicator.stage_id == DMStage.stage_id)
+                    .join(DMService, DMIndicator.service_id == DMService.service_id)
+                    .filter(FactIndicatorResponse.municipality_id == muni_obj.municipality_id)
+                    .all())
+
+            if not rows:
+                return {"score_total": 0.0, "nivel": "Inicial", "etapas": {}, "servicios": {}}
+
+            etapa_sum = {"Planificación": 0.0, "Ejecución": 0.0, "Evaluación": 0.0}
+            etapa_n   = {"Planificación": 0,   "Ejecución": 0,   "Evaluación": 0}
+            serv_data: dict[str, dict] = {}
+
+            for code, etapa, servicio, val in rows:
+                v = float(val) if val is not None else 0.0
+                etapa_sum[etapa] = etapa_sum.get(etapa, 0.0) + v
+                etapa_n[etapa]   = etapa_n.get(etapa, 0) + 1
+
+                if servicio not in serv_data:
+                    serv_data[servicio] = {"Planificación": [0.0, 0], "Ejecución": [0.0, 0], "Evaluación": [0.0, 0]}
+                serv_data[servicio][etapa][0] += v
+                serv_data[servicio][etapa][1] += 1
+
+            # Score total: fórmula PT-228
+            PESOS = {"Planificación": 0.50, "Ejecución": 0.30, "Evaluación": 0.20}
+            score_total = sum(
+                etapa_sum[e] * PESOS[e] / etapa_n[e]
+                for e in PESOS if etapa_n[e] > 0
+            )
+            score_total = round(score_total, 4)
+
+            # Score por etapa (para mostrar en vistas)
+            etapas_scores = {
+                e: round(etapa_sum[e] / etapa_n[e], 4) if etapa_n[e] > 0 else 0.0
+                for e in PESOS
+            }
+
+            # Score por servicio
+            servicios_scores = {}
+            for serv, etd in serv_data.items():
+                s_score = sum(
+                    etd[e][0] * PESOS[e] / etd[e][1]
+                    for e in PESOS if etd[e][1] > 0
+                )
+                servicios_scores[serv] = round(s_score, 4)
+
+            return {
+                "score_total": score_total,
+                "nivel":       clasificar_nivel(score_total),
+                "etapas":      etapas_scores,
+                "servicios":   servicios_scores,
+            }
+    except Exception:
+        return {"score_total": 0.0, "nivel": "Inicial", "etapas": {}, "servicios": {}}
 
 
 # ── Helpers internos ─────────────────────────────────────────────────────────
@@ -31,21 +105,14 @@ from data.indicators import clasificar_nivel, COLORES_NIVEL
 def _build_muni_record(muni: dict, end_date=None, posicion: int = 0) -> dict:
     """Construye el registro completo de una municipalidad con puntaje calculado."""
     codigo = muni["codigo"]
-    diversificados = muni.get("diversificados", [])
 
     respuestas = get_latest_responses_for_municipality(codigo, end_date=end_date)
 
-    try:
-        calc = calcular_igsm_municipalidad(respuestas, diversificados)
-        score = calc["score_total"]
-        nivel = calc["nivel"]
-        etapas = calc.get("etapas_scores", {"Planificación": 0.0, "Ejecución": 0.0, "Evaluación": 0.0})
-        servicios_scores = {k: v["score"] for k, v in calc["servicios"].items()}
-    except Exception:
-        score = 0.0
-        nivel = "Inicial"
-        etapas = {"Planificación": 0.0, "Ejecución": 0.0, "Evaluación": 0.0}
-        servicios_scores = {}
+    calc = _calcular_igsm_bd(codigo, end_date=end_date)
+    score            = calc["score_total"]
+    nivel            = calc["nivel"]
+    etapas           = calc.get("etapas", {"Planificación": 0.0, "Ejecución": 0.0, "Evaluación": 0.0})
+    servicios_scores = calc.get("servicios", {})
 
     # Historial estimado 2022-2024 basado en el score real 2025
     import random
