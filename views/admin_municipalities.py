@@ -26,12 +26,13 @@ def show():
         otros = [n for n in nombres if n != seleccionada]
         muni_sel2 = st.selectbox("Segunda municipalidad para comparar", otros, key="admin_muni_sel2")
 
-    data = get_municipalidad_data(seleccionada)
+    # Obtener datos con posición real desde el ranking ya cargado
+    data = next((m for m in ranking if m["municipalidad"] == seleccionada), None)
     if not data:
         st.error("No se encontraron datos.")
         return
 
-    data2 = get_municipalidad_data(muni_sel2) if muni_sel2 else None
+    data2 = next((m for m in ranking if m["municipalidad"] == muni_sel2), None) if muni_sel2 else None
 
     # ── KPIs ──────────────────────────────────────────────────────────────────
     st.markdown("---")
