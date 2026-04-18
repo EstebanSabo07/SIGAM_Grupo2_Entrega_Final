@@ -126,7 +126,7 @@ def show():
         if sim_suma != 100:
             alert_box(f"Suma: {sim_suma}% (debe ser 100%)", "danger", "❌")
         else:
-            from data.mock_data import get_ranking
+            from data.db_layer import get_ranking
             ranking = get_ranking()
 
             # Recalcular con nuevos pesos

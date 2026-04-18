@@ -6,8 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 from components.ui import page_header, alert_box
 from components.charts import mapa_costa_rica, cluster_chart
-from data.db_layer import get_ranking, get_scores_por_servicio_nacional
-from data.mock_data import get_historial_nacional
+from data.db_layer import get_ranking, get_scores_por_servicio_nacional, get_historial_nacional
 ORDEN_NIVELES = ["Inicial", "Básico", "Intermedio", "Avanzado", "Optimizando"]
 
 def show():
