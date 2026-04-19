@@ -1,9 +1,10 @@
 Referencia de API
 =================
 
-La referencia de API se genera desde los docstrings Google-style en ingles. El
-punto de entrada ``main.py`` no se importa con autodoc porque ejecuta
-configuracion de Streamlit al importarse.
+En esta sección se documentan los componentes internos del proyecto SIGAM,
+incluyendo módulos, clases y funciones. Esta referencia está dirigida a
+desarrolladores que deseen entender la estructura del sistema, consultar el uso
+de sus métodos o extender sus funcionalidades.
 
 .. toctree::
    :maxdepth: 2
