@@ -1,3 +1,5 @@
+"""Export and publication view for the Contraloria portal."""
+
 # views/admin_export.py — Exportación de reportes y publicación del ranking
 
 import io
@@ -20,6 +22,15 @@ from data.db_layer import (
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _nombre_corto(nombre: str) -> str:
+    """Return the short display name for a service.
+
+    Args:
+        nombre: Full service name.
+
+    Returns:
+        Short service name when configured, otherwise the original name.
+    """
+
     mapa = {
         "Recolección, depósito y tratamiento de residuos sólidos": "Recolección Residuos",
         "Aseo de vías y sitios públicos":                          "Aseo de Vías",
@@ -36,7 +47,16 @@ def _nombre_corto(nombre: str) -> str:
 
 
 def _generar_excel_nacional(ranking: list, stats: dict) -> bytes:
-    """Genera el Excel completo del informe nacional IGSM 2025."""
+    """Generate the national IGSM Excel report.
+
+    Args:
+        ranking: National ranking records.
+        stats: National summary statistics.
+
+    Returns:
+        Excel workbook bytes.
+    """
+
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
 
@@ -121,7 +141,15 @@ def _generar_excel_nacional(ranking: list, stats: dict) -> bytes:
 
 
 def _generar_excel_municipalidad(nombre: str) -> bytes | None:
-    """Genera el Excel del informe individual de una municipalidad."""
+    """Generate an individual municipality Excel report.
+
+    Args:
+        nombre: Municipality display name.
+
+    Returns:
+        Excel workbook bytes, or None when the municipality is unknown.
+    """
+
     data = get_municipalidad_data(nombre)
     if data is None:
         return None
@@ -177,6 +205,13 @@ def _generar_excel_municipalidad(nombre: str) -> bytes | None:
 # ── Vista principal ───────────────────────────────────────────────────────────
 
 def show():
+    """Render the export and publication page.
+
+    The page offers national and municipal downloads, preview tables, filtered
+    CSV exports, and ranking publication controls backed by Streamlit session
+    state.
+    """
+
     page_header("Exportar & Reportes", "Descargue datos, genere informes y publique el ranking oficial", "📥")
 
     ranking = get_ranking()

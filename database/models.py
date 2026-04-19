@@ -19,7 +19,11 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
 
 def utcnow() -> datetime:
-    """Return the current timezone-aware UTC timestamp."""
+    """Return the current timezone-aware UTC timestamp.
+
+    Returns:
+        Current UTC datetime with timezone information.
+    """
 
     return datetime.now(timezone.utc)
 
@@ -29,7 +33,19 @@ class Base(DeclarativeBase):
 
 
 class DMMunicipality(Base):
-    """Municipality dimension row."""
+    """Municipality dimension row.
+
+    Attributes:
+        municipality_id: Primary key.
+        code: Official municipality code.
+        name: Municipality display name.
+        province: Province name.
+        region: Planning region name.
+        latitude: Latitude used for map visualizations.
+        longitude: Longitude used for map visualizations.
+        diversified_services: Diversified-service links for the municipality.
+        responses: Indicator response fact rows submitted by the municipality.
+    """
 
     __tablename__ = "dm_municipality"
 
@@ -48,7 +64,14 @@ class DMMunicipality(Base):
 
 
 class DMMunicipalityDiversifiedService(Base):
-    """Applicable diversified service for a municipality."""
+    """Diversified-service link for a municipality.
+
+    Attributes:
+        municipality_id: Municipality primary key.
+        service_id: Service primary key.
+        municipality: Linked municipality row.
+        service: Linked service row.
+    """
 
     __tablename__ = "dm_municipality_diversified_service"
 
@@ -66,7 +89,13 @@ class DMMunicipalityDiversifiedService(Base):
 
 
 class DMAxis(Base):
-    """IGSM management axis dimension row."""
+    """IGSM management axis dimension row.
+
+    Attributes:
+        axis_id: Primary key.
+        name: Axis display name.
+        services: Services assigned to the axis.
+    """
 
     __tablename__ = "dm_axis"
 
@@ -77,7 +106,19 @@ class DMAxis(Base):
 
 
 class DMService(Base):
-    """IGSM service dimension row."""
+    """IGSM service dimension row.
+
+    Attributes:
+        service_id: Primary key.
+        axis_id: Parent axis primary key.
+        name: Service display name.
+        service_code: Official service code.
+        grouping: Service grouping, such as basic or diversified.
+        diversified_key: Optional diversified-service key used by municipalities.
+        axis: Parent axis row.
+        indicators: Indicators assigned to the service.
+        municipality_links: Municipality links for diversified services.
+    """
 
     __tablename__ = "dm_service"
     __table_args__ = (UniqueConstraint("axis_id", "name", name="uq_dm_service_axis_name"),)
@@ -97,7 +138,13 @@ class DMService(Base):
 
 
 class DMStage(Base):
-    """Global IGSM stage dimension row."""
+    """Global IGSM stage dimension row.
+
+    Attributes:
+        stage_id: Primary key.
+        name: Stage display name.
+        indicators: Indicators assigned to the stage.
+    """
 
     __tablename__ = "dm_stage"
 
@@ -108,7 +155,21 @@ class DMStage(Base):
 
 
 class DMIndicator(Base):
-    """IGSM indicator dimension row."""
+    """IGSM indicator dimension row.
+
+    Attributes:
+        indicator_id: Primary key.
+        service_id: Parent service primary key.
+        stage_id: Parent stage primary key.
+        code: Official indicator code.
+        name: Indicator display name.
+        type: Indicator response type.
+        evidence_required: Whether the indicator requires supporting evidence.
+        documentation: Evidence or documentation guidance.
+        service: Parent service row.
+        stage: Parent stage row.
+        responses: Response fact rows for the indicator.
+    """
 
     __tablename__ = "dm_indicator"
 
@@ -131,7 +192,17 @@ class DMIndicator(Base):
 
 
 class FactIndicatorResponse(Base):
-    """Numeric indicator answer submitted by a municipality."""
+    """Numeric indicator answer submitted by a municipality.
+
+    Attributes:
+        response_id: Primary key.
+        date_time: Submission timestamp.
+        municipality_id: Municipality primary key.
+        indicator_id: Indicator primary key.
+        value: Numeric answer value.
+        municipality: Linked municipality row.
+        indicator: Linked indicator row.
+    """
 
     __tablename__ = "fact_indicator_response"
     __table_args__ = (
@@ -165,7 +236,15 @@ class FactIndicatorResponse(Base):
 
 
 class FactStageWeight(Base):
-    """Effective-dated global stage weights."""
+    """Effective-dated global stage weights.
+
+    Attributes:
+        stage_weight_id: Primary key.
+        planning_weight: Weight for the planning stage.
+        execution_weight: Weight for the execution stage.
+        evaluation_weight: Weight for the evaluation stage.
+        effective_from: First date when the weights apply.
+    """
 
     __tablename__ = "fact_stage_weight"
 
@@ -177,7 +256,17 @@ class FactStageWeight(Base):
 
 
 class FactMaturityThreshold(Base):
-    """Effective-dated maturity-level thresholds."""
+    """Effective-dated maturity-level thresholds.
+
+    Attributes:
+        threshold_id: Primary key.
+        initial_upper: Upper bound for the initial level.
+        basic_upper: Upper bound for the basic level.
+        intermediate_upper: Upper bound for the intermediate level.
+        advanced_upper: Upper bound for the advanced level.
+        optimizing_upper: Upper bound for the optimizing level.
+        effective_from: First date when the thresholds apply.
+    """
 
     __tablename__ = "fact_maturity_threshold"
 

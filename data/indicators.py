@@ -1,3 +1,5 @@
+"""Static IGSM indicator structure and maturity helpers."""
+
 # data/indicators.py — Estructura completa del IGSM 2025 (159 indicadores)
 # Fuente: PT-228 Contraloría General de la República de Costa Rica (2025)
 # Estructura oficial: 10 servicios, 3 ejes, 159 indicadores puntuables
@@ -34,6 +36,15 @@ COLORES_NIVEL = {
 }
 
 def clasificar_nivel(score: float) -> str:
+    """Classify an IGSM score into a maturity level.
+
+    Args:
+        score: IGSM score in the 0-1 range.
+
+    Returns:
+        Maturity level label.
+    """
+
     for lo, hi, nivel in UMBRALES_NIVEL:
         if lo <= score < hi:
             return nivel
@@ -404,11 +415,19 @@ ESTRUCTURA_IGSM = {
 
 
 def get_servicios_para_municipalidad(diversificados: list) -> dict:
+    """Return the services that apply to a municipality.
+
+    Basic services are always included. Diversified services are included only
+    when their service key is present in the municipality's diversified-service
+    list.
+
+    Args:
+        diversificados: Diversified service keys assigned to the municipality.
+
+    Returns:
+        Mapping from service name to service metadata, including the axis name.
     """
-    Retorna solo los servicios que aplican para una municipalidad según sus servicios diversificados.
-    Los servicios básicos (agrupacion=='Básico') siempre se incluyen.
-    Los diversificados se incluyen si su clave aparece en la lista de diversificados de la municipalidad.
-    """
+
     servicios = {}
     for eje_nombre, eje_data in ESTRUCTURA_IGSM.items():
         for serv_nombre, serv_data in eje_data["servicios"].items():
@@ -420,7 +439,12 @@ def get_servicios_para_municipalidad(diversificados: list) -> dict:
 
 
 def contar_indicadores_totales() -> dict:
-    """Cuenta los indicadores puntuables (excluye informativos) por etapa y total."""
+    """Count scored indicators by stage and in total.
+
+    Returns:
+        Dictionary with total, planning, execution, and evaluation counts.
+    """
+
     total = plan = ejec = evalu = 0
     for eje_data in ESTRUCTURA_IGSM.values():
         for serv_data in eje_data["servicios"].values():

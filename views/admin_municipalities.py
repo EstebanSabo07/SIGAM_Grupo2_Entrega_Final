@@ -1,3 +1,5 @@
+"""Municipality detail and comparison view for administrators."""
+
 # views/admin_municipalities.py — Vista detallada por municipalidad
 
 import streamlit as st
@@ -8,6 +10,13 @@ from data.db_layer import get_ranking, get_municipalidad_data
 from data.indicators import clasificar_nivel
 
 def show():
+    """Render the administrator municipality-detail page.
+
+    The page lets the user select one or two municipalities, then renders KPI
+    cards, comparative charts, service summaries, and a CSV export in
+    Streamlit.
+    """
+
     page_header("Análisis por Municipalidad", "Consulte el detalle de cualquier municipalidad del país", "🏛️")
 
     ranking = get_ranking()

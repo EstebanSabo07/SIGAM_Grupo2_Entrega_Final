@@ -1,3 +1,5 @@
+"""Plotly chart builders used by SIGAM views."""
+
 # components/charts.py — Visualizaciones Plotly para SIGAM
 
 import plotly.express as px
@@ -16,6 +18,16 @@ COLOR_PRIMARY = "#1A3A6B"
 COLOR_ACCENT  = "#E87722"
 
 def _layout_base(fig, height=400):
+    """Apply the shared SIGAM visual layout to a Plotly figure.
+
+    Args:
+        fig: Plotly figure to style.
+        height: Figure height in pixels.
+
+    Returns:
+        The same Plotly figure with common layout properties applied.
+    """
+
     fig.update_layout(
         height=height,
         margin=dict(t=30, b=40, l=20, r=20),
@@ -28,7 +40,16 @@ def _layout_base(fig, height=400):
 
 
 def ranking_bar_chart(df: pd.DataFrame, top_n: int = 20) -> go.Figure:
-    """Top N municipalidades por puntaje."""
+    """Build a horizontal ranking chart for municipalities.
+
+    Args:
+        df: Ranking data with municipality, level, and total score columns.
+        top_n: Number of municipalities to display from the top of the data.
+
+    Returns:
+        Plotly bar chart with municipalities grouped by maturity level.
+    """
+
     df_top = df.head(top_n).copy()
     df_top["color"] = df_top["nivel"].map(COLORES_NIVEL)
     df_top["puntaje_pct"] = df_top["score_total"] * 100
@@ -58,7 +79,15 @@ def ranking_bar_chart(df: pd.DataFrame, top_n: int = 20) -> go.Figure:
 
 
 def distribucion_niveles_pie(distribucion: dict) -> go.Figure:
-    """Torta de distribución por nivel de madurez."""
+    """Build a donut chart for maturity-level distribution.
+
+    Args:
+        distribucion: Mapping from maturity level to municipality count.
+
+    Returns:
+        Plotly pie chart with the configured maturity colors.
+    """
+
     labels = [k for k in ORDEN_NIVELES if k in distribucion]
     values = [distribucion[k] for k in labels]
     colors = [COLORES_NIVEL[k] for k in labels]
@@ -80,7 +109,16 @@ def distribucion_niveles_pie(distribucion: dict) -> go.Figure:
 
 
 def radar_ejes(scores_eje: dict, nombre: str = "") -> go.Figure:
-    """Gráfico radar por eje/servicio."""
+    """Build a radar chart for axis or service scores.
+
+    Args:
+        scores_eje: Mapping from axis or service name to score in the 0-1 range.
+        nombre: Trace label to display when legends are enabled.
+
+    Returns:
+        Plotly polar scatter figure.
+    """
+
     categorias = list(scores_eje.keys())
     valores = [v * 100 for v in scores_eje.values()]
     valores_cerrado = valores + [valores[0]]
@@ -106,7 +144,16 @@ def radar_ejes(scores_eje: dict, nombre: str = "") -> go.Figure:
 
 
 def historico_lineas(historial_data: dict, nombre: str = "") -> go.Figure:
-    """Línea de evolución histórica."""
+    """Build a line chart for historical IGSM scores.
+
+    Args:
+        historial_data: Mapping from period label to score in the 0-1 range.
+        nombre: Trace label for the historical series.
+
+    Returns:
+        Plotly line chart with score percentages.
+    """
+
     anos = list(historial_data.keys())
     valores = [v * 100 for v in historial_data.values()]
 
@@ -129,7 +176,16 @@ def historico_lineas(historial_data: dict, nombre: str = "") -> go.Figure:
 
 
 def comparacion_servicios_bar(scores_servicios: dict, promedio_nacional: dict = None) -> go.Figure:
-    """Barras comparativas por servicio."""
+    """Build a service comparison bar chart.
+
+    Args:
+        scores_servicios: Mapping from service name to municipal score.
+        promedio_nacional: Optional mapping from service name to national score.
+
+    Returns:
+        Plotly bar chart with optional national average markers.
+    """
+
     nombres_cortos = {
         "Recolección, depósito y tratamiento de residuos sólidos": "Recolección",
         "Aseo de vías y sitios públicos":                          "Aseo Vías",
@@ -175,7 +231,15 @@ def comparacion_servicios_bar(scores_servicios: dict, promedio_nacional: dict = 
 
 
 def mapa_costa_rica(df: pd.DataFrame) -> go.Figure:
-    """Mapa geoespacial de Costa Rica coloreado por nivel IGSM."""
+    """Build a Costa Rica map colored by IGSM maturity level.
+
+    Args:
+        df: Municipality ranking data with latitude, longitude, score, and level.
+
+    Returns:
+        Plotly Mapbox scatter figure.
+    """
+
     df = df.copy()
     df["puntaje_pct"] = df["score_total"] * 100
     df["nivel_num"] = df["nivel"].map({
@@ -210,7 +274,15 @@ def mapa_costa_rica(df: pd.DataFrame) -> go.Figure:
 
 
 def heatmap_region_servicio(df: pd.DataFrame) -> go.Figure:
-    """Heatmap promedio por región y servicio."""
+    """Build a heatmap of average service scores by region.
+
+    Args:
+        df: Ranking data containing region and nested service score values.
+
+    Returns:
+        Plotly heatmap figure.
+    """
+
     nombres_cortos = {
         "Recolección, depósito y tratamiento de residuos sólidos": "Recolección",
         "Aseo de vías y sitios públicos":                          "Aseo Vías",
@@ -257,7 +329,17 @@ def heatmap_region_servicio(df: pd.DataFrame) -> go.Figure:
 
 
 def scatter_dispersion(df: pd.DataFrame, eje_x: str = "score_total") -> go.Figure:
-    """Scatter de municipalidades por score y región."""
+    """Build a municipality dispersion chart by score and relative position.
+
+    Args:
+        df: Ranking data with score, level, and position columns.
+        eje_x: Compatibility argument retained by callers; the chart uses the
+            total score percentage.
+
+    Returns:
+        Plotly scatter chart.
+    """
+
     df = df.copy()
     df["puntaje_pct"] = df["score_total"] * 100
     df["posicion_inv"] = max(df["posicion"]) - df["posicion"] + 1
@@ -283,7 +365,15 @@ def scatter_dispersion(df: pd.DataFrame, eje_x: str = "score_total") -> go.Figur
 
 
 def barras_etapas(etapas: dict) -> go.Figure:
-    """Barras de score por etapa."""
+    """Build a bar chart for stage scores.
+
+    Args:
+        etapas: Mapping from stage name to score in the 0-1 range.
+
+    Returns:
+        Plotly bar chart with stage percentages.
+    """
+
     nombres = list(etapas.keys())
     valores = [v * 100 for v in etapas.values()]
     colores = [COLOR_PRIMARY, COLOR_ACCENT, "#20C997"][:len(nombres)]
@@ -303,7 +393,16 @@ def barras_etapas(etapas: dict) -> go.Figure:
 
 
 def cluster_chart(df: pd.DataFrame) -> go.Figure:
-    """Análisis de clústeres de municipalidades."""
+    """Build a municipality cluster chart.
+
+    Args:
+        df: Ranking data with at least total score, region, level, and
+            municipality columns.
+
+    Returns:
+        Plotly scatter chart with inferred or fallback cluster labels.
+    """
+
     try:
         from sklearn.cluster import KMeans
         import numpy as np
@@ -338,5 +437,14 @@ def cluster_chart(df: pd.DataFrame) -> go.Figure:
 
 
 def _nivel_por_score(score: float) -> str:
+    """Classify a numeric IGSM score into a maturity level.
+
+    Args:
+        score: IGSM score in the 0-1 range.
+
+    Returns:
+        Maturity level label.
+    """
+
     from data.indicators import clasificar_nivel
     return clasificar_nivel(score)

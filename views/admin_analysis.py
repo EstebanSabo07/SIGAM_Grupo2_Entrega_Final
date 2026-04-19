@@ -1,3 +1,5 @@
+"""Advanced analytics view for the Contraloria portal."""
+
 # views/admin_analysis.py — Análisis avanzado: geoespacial, clústeres, correlación, SEM
 
 import streamlit as st
@@ -10,6 +12,13 @@ from data.db_layer import get_ranking, get_scores_por_servicio_nacional, get_his
 ORDEN_NIVELES = ["Inicial", "Básico", "Intermedio", "Avanzado", "Optimizando"]
 
 def show():
+    """Render the advanced analytics page.
+
+    The page reads national ranking data, creates geospatial, cluster,
+    correlation, historical trend, and SEM analyses, and writes the resulting
+    controls and charts to the active Streamlit page.
+    """
+
     page_header("Análisis Avanzado", "Geoespacial · Clústeres · Correlación · Tendencias · Modelos estructurales", "🔬")
 
     ranking = get_ranking()

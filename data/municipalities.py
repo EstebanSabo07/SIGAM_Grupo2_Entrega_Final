@@ -1,3 +1,5 @@
+"""Static municipality catalog for Costa Rica."""
+
 # data/municipalities.py — 84 municipalidades de Costa Rica con coordenadas y regiones
 
 MUNICIPALIDADES = [
@@ -102,18 +104,51 @@ REGIONES = sorted(list(set(m["region"] for m in MUNICIPALIDADES)))
 PROVINCIAS = ["San José", "Alajuela", "Cartago", "Heredia", "Guanacaste", "Puntarenas", "Limón"]
 
 def get_municipalidad(codigo: str) -> dict:
+    """Return a municipality by code.
+
+    Args:
+        codigo: Municipality code.
+
+    Returns:
+        Municipality dictionary, or None when not found.
+    """
+
     for m in MUNICIPALIDADES:
         if m["codigo"] == codigo:
             return m
     return None
 
 def get_municipalidades_by_region(region: str) -> list:
+    """Return municipalities in a region.
+
+    Args:
+        region: Region name.
+
+    Returns:
+        List of municipality dictionaries for the region.
+    """
+
     return [m for m in MUNICIPALIDADES if m["region"] == region]
 
 def get_nombres() -> list:
+    """Return all municipality names.
+
+    Returns:
+        List of municipality names in catalog order.
+    """
+
     return [m["nombre"] for m in MUNICIPALIDADES]
 
 def get_by_nombre(nombre: str) -> dict:
+    """Return a municipality by exact name.
+
+    Args:
+        nombre: Municipality name.
+
+    Returns:
+        Municipality dictionary, or None when not found.
+    """
+
     for m in MUNICIPALIDADES:
         if m["nombre"] == nombre:
             return m

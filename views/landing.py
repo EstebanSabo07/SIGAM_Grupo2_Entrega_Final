@@ -1,3 +1,5 @@
+"""Public landing page view for SIGAM."""
+
 # views/landing.py — Página pública de presentación de SIGAM
 
 import streamlit as st
@@ -5,11 +7,27 @@ import base64
 from pathlib import Path
 
 def _img_b64(path: Path, mime: str = "image/png") -> str:
-    """Codifica una imagen como base64 para incrustar en HTML."""
+    """Encode an image file as a data URI.
+
+    Args:
+        path: Image file path.
+        mime: MIME type to include in the data URI.
+
+    Returns:
+        Base64 data URI for embedding in HTML.
+    """
+
     with open(path, "rb") as f:
         return f"data:{mime};base64,{base64.b64encode(f.read()).decode()}"
 
 def show():
+    """Render the public landing page.
+
+    The page displays the SIGAM introduction, project information, quick
+    statistics, and navigation actions that update Streamlit session state for
+    login routing.
+    """
+
     assets = Path(__file__).parent.parent / "assets"
     logo_cgr  = assets / "logo_cgr.svg"
     logo_lead = assets / "logo_lead.png"

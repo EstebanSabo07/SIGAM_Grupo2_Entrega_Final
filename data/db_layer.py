@@ -1,3 +1,5 @@
+"""Application-facing data access layer for SIGAM views."""
+
 # data/db_layer.py — Capa de integración entre SIGAM y la base de datos ORM
 # Traduce las llamadas del repositorio al formato que esperan las vistas.
 
@@ -31,11 +33,21 @@ from data.indicators import clasificar_nivel, COLORES_NIVEL
 # ── Cálculo IGSM usando metadatos de la BD (fórmula exacta PT-228) ────────────
 
 def _calcular_igsm_bd(codigo: str, end_date=None) -> dict:
+    """Calculate IGSM from database metadata for one municipality.
+
+    The calculation uses the stage metadata stored in the ORM tables and
+    applies the PT-228 stage-weight formula.
+
+    Args:
+        codigo: Municipality code.
+        end_date: Optional cutoff date accepted by repository helpers.
+
+    Returns:
+        Score summary with total score, maturity level, stage scores, and
+        service scores. A zero-score fallback is returned when calculation
+        fails.
     """
-    Calcula el IGSM replicando exactamente la metodología del notebook/PT-228:
-      score = 0.50×(Σplan/n_plan) + 0.30×(Σejec/n_ejec) + 0.20×(Σeval/n_eval)
-    Usa los metadatos de etapa directamente de la BD, no de indicators.py.
-    """
+
     try:
         with session_scope() as s:
             muni_obj = s.query(DMMunicipality).filter(DMMunicipality.code == codigo).first()
@@ -103,7 +115,17 @@ def _calcular_igsm_bd(codigo: str, end_date=None) -> dict:
 # ── Helpers internos ─────────────────────────────────────────────────────────
 
 def _build_muni_record(muni: dict, end_date=None, posicion: int = 0) -> dict:
-    """Construye el registro completo de una municipalidad con puntaje calculado."""
+    """Build the view-ready record for a municipality.
+
+    Args:
+        muni: Municipality dictionary from the repository layer.
+        end_date: Optional cutoff date for responses.
+        posicion: Ranking position assigned by the caller.
+
+    Returns:
+        Municipality record with score, level, location, history, and status.
+    """
+
     codigo = muni["codigo"]
 
     respuestas = get_latest_responses_for_municipality(codigo, end_date=end_date)
@@ -145,7 +167,15 @@ def _build_muni_record(muni: dict, end_date=None, posicion: int = 0) -> dict:
 # ── API pública ──────────────────────────────────────────────────────────────
 
 def get_ranking(end_date=None) -> list[dict]:
-    """Retorna el ranking de las 84 municipalidades con puntajes calculados desde la BD."""
+    """Return the national municipality ranking.
+
+    Args:
+        end_date: Optional cutoff date for responses.
+
+    Returns:
+        Ranking records ordered by descending total score.
+    """
+
     municipalidades = list_municipalities()
     registros = []
     for muni in municipalidades:
@@ -160,7 +190,16 @@ def get_ranking(end_date=None) -> list[dict]:
 
 
 def get_municipalidad_data(nombre: str, end_date=None) -> dict | None:
-    """Retorna datos completos de una municipalidad por nombre."""
+    """Return complete municipality data by name.
+
+    Args:
+        nombre: Municipality display name.
+        end_date: Optional cutoff date for responses.
+
+    Returns:
+        Municipality record, or None when the name is unknown.
+    """
+
     muni = get_municipality_by_name(nombre)
     if muni is None:
         return None
@@ -168,7 +207,16 @@ def get_municipalidad_data(nombre: str, end_date=None) -> dict | None:
 
 
 def get_municipalidad_data_by_codigo(codigo: str, end_date=None) -> dict | None:
-    """Retorna datos completos de una municipalidad por código."""
+    """Return complete municipality data by code.
+
+    Args:
+        codigo: Municipality code.
+        end_date: Optional cutoff date for responses.
+
+    Returns:
+        Municipality record, or None when the code is unknown.
+    """
+
     muni = get_municipality_by_code(codigo)
     if muni is None:
         return None
@@ -176,7 +224,16 @@ def get_municipalidad_data_by_codigo(codigo: str, end_date=None) -> dict | None:
 
 
 def get_estadisticas_nacionales(end_date=None) -> dict:
-    """Retorna KPIs nacionales calculados desde la BD."""
+    """Return national KPI statistics calculated from the database.
+
+    Args:
+        end_date: Optional cutoff date for responses.
+
+    Returns:
+        National totals, participation metrics, score extrema, and maturity
+        distribution.
+    """
+
     ranking = get_ranking(end_date=end_date)
     total = len(ranking)
     enviados = sum(1 for m in ranking if m["estado_envio"] == "Enviado")
@@ -199,7 +256,15 @@ def get_estadisticas_nacionales(end_date=None) -> dict:
 
 
 def get_scores_por_servicio_nacional(end_date=None) -> dict[str, float]:
-    """Retorna el promedio nacional de puntaje por servicio."""
+    """Return national average scores by service.
+
+    Args:
+        end_date: Optional cutoff date for responses.
+
+    Returns:
+        Mapping from service name to average score.
+    """
+
     ranking = get_ranking(end_date=end_date)
     acumulado: dict[str, list[float]] = {}
     for muni in ranking:
@@ -209,7 +274,17 @@ def get_scores_por_servicio_nacional(end_date=None) -> dict[str, float]:
 
 
 def save_responses(municipalidad_codigo: str, respuestas: dict, end_date=None) -> dict:
-    """Persiste las respuestas del formulario en la BD."""
+    """Persist form responses for a municipality.
+
+    Args:
+        municipalidad_codigo: Municipality code.
+        respuestas: Mapping from indicator code to submitted value.
+        end_date: Optional response date. Defaults to today.
+
+    Returns:
+        Repository submission summary.
+    """
+
     if end_date is None:
         end_date = date.today().isoformat()
     # Filtrar solo respuestas numéricas de indicadores (excluir evidencias "_ev")
@@ -222,12 +297,26 @@ def save_responses(municipalidad_codigo: str, respuestas: dict, end_date=None) -
 
 
 def load_responses(municipalidad_codigo: str, end_date=None) -> dict:
-    """Carga las respuestas más recientes de una municipalidad desde la BD."""
+    """Load the latest responses for a municipality.
+
+    Args:
+        municipalidad_codigo: Municipality code.
+        end_date: Optional response cutoff date.
+
+    Returns:
+        Mapping from indicator code to latest value.
+    """
+
     return get_latest_responses_for_municipality(municipalidad_codigo, end_date=end_date)
 
 
 def get_historial_nacional() -> dict:
-    """Retorna historial nacional 2022-2025. El año 2025 usa datos reales de la BD."""
+    """Return national historical summary data for 2022-2025.
+
+    Returns:
+        Mapping from year to national average and maturity-level counts.
+    """
+
     historial = {
         "2022": {"promedio": 0.37, "Inicial": 12, "Básico": 58, "Intermedio": 14, "Avanzado": 0, "Optimizando": 0},
         "2023": {"promedio": 0.39, "Inicial": 10, "Básico": 56, "Intermedio": 16, "Avanzado": 0, "Optimizando": 0},
@@ -250,13 +339,32 @@ def get_historial_nacional() -> dict:
 
 
 def get_weights(end_date=None) -> dict[str, float]:
-    """Retorna los pesos de etapa vigentes."""
+    """Return the effective stage weights.
+
+    Args:
+        end_date: Optional cutoff date for effective weights.
+
+    Returns:
+        Mapping from stage name to weight.
+    """
+
     return get_latest_stage_weights(end_date=end_date)
 
 
 def save_weights(planificacion: float, ejecucion: float, evaluacion: float,
                  effective_from: date | None = None) -> dict:
-    """Persiste nuevos pesos de etapa en la BD."""
+    """Persist a new set of stage weights.
+
+    Args:
+        planificacion: Planning stage weight.
+        ejecucion: Execution stage weight.
+        evaluacion: Evaluation stage weight.
+        effective_from: Optional effective date. Defaults to today.
+
+    Returns:
+        Saved stage-weight summary.
+    """
+
     if effective_from is None:
         effective_from = date.today()
     return save_stage_weights(

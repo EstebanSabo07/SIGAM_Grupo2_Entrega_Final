@@ -1,3 +1,5 @@
+"""Municipal results view."""
+
 # views/muni_results.py — Resultados del municipio
 
 import streamlit as st
@@ -7,6 +9,13 @@ from data.db_layer import get_ranking
 from data.indicators import clasificar_nivel
 
 def show():
+    """Render the municipal IGSM results page.
+
+    The page reads the active municipality from Streamlit session state, shows
+    summary KPIs, service detail, historical analysis, anomaly alerts, and CSV
+    download controls.
+    """
+
     nombre = st.session_state.get("municipalidad", "Municipalidad")
     ranking = get_ranking()
     data = next((m for m in ranking if m["municipalidad"] == nombre), None)

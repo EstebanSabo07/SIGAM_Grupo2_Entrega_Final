@@ -40,6 +40,13 @@ desktop.ini
 *.log
 logs/
 
+# Bases de datos locales generadas
+*.sqlite
+*.sqlite3
+*.db
+database/igsm_dev.sqlite3
+
 # Archivos temporales de uploads
 uploads/
 temp/
+.test_tmp/

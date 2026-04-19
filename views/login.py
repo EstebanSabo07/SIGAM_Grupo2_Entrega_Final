@@ -1,3 +1,5 @@
+"""Login view for municipality and administrator demo access."""
+
 # views/login.py — Acceso simplificado: municipalidad (código) o admin
 
 import streamlit as st
@@ -8,6 +10,13 @@ ADMIN_USUARIO = "contraloria"
 ADMIN_CLAVE   = "cgr2025"
 
 def show():
+    """Render the login page.
+
+    The page authenticates demo municipal and administrator users, then updates
+    Streamlit session state with the selected role, municipality context, and
+    next page.
+    """
+
     logo_cgr = Path(__file__).parent.parent / "assets" / "logo_cgr.svg"
     rol = st.session_state.get("rol_login", "municipalidad")
 

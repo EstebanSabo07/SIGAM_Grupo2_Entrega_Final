@@ -1,24 +1,41 @@
+"""IGSM scoring and validation helpers."""
+
 # data/calculation.py — Motor de cálculo IGSM (replicación exacta de la metodología CGR)
 # Fuente: igsm_replicacion_IGSM2025-actualizado_grupo2.ipynb (97.6% → 100% exactitud con ajuste)
 
 from data.indicators import ESTRUCTURA_IGSM, UMBRALES_NIVEL, TIPO_INFORMATIVO, PESOS_ETAPA
 
 def clasificar_nivel(score: float) -> str:
-    """Clasifica un score en su nivel de madurez oficial."""
+    """Classify an IGSM score into its official maturity level.
+
+    Args:
+        score: IGSM score in the 0-1 range.
+
+    Returns:
+        Official maturity level label.
+    """
+
     for lo, hi, nivel in UMBRALES_NIVEL:
         if lo <= score < hi:
             return nivel
     return "Optimizando"
 
 def calcular_score_servicio(respuestas: dict, servicio_nombre: str, eje_nombre: str) -> dict:
-    """
-    Calcula el puntaje de un servicio para una municipalidad.
+    """Calculate the score for one municipal service.
 
-    Fórmula por etapa:
-        score_etapa = Σ(valores_indicadores) / n_indicadores_en_etapa
-    Score final del servicio:
-        score = Σ_etapas (peso_etapa × score_etapa)
+    The stage score is the average of scored indicators in the stage. The final
+    service score is the weighted sum of stage scores using the official CGR
+    stage weights.
+
+    Args:
+        respuestas: Mapping from indicator code to submitted value.
+        servicio_nombre: Service name as defined in the IGSM structure.
+        eje_nombre: Axis name that contains the service.
+
+    Returns:
+        Service score summary with stage detail and final score.
     """
+
     serv_data = ESTRUCTURA_IGSM[eje_nombre]["servicios"][servicio_nombre]
     resultado = {"servicio": servicio_nombre, "eje": eje_nombre, "etapas": {}, "score": 0.0}
 
@@ -53,16 +70,21 @@ def calcular_score_servicio(respuestas: dict, servicio_nombre: str, eje_nombre: 
 
 
 def calcular_igsm_municipalidad(respuestas: dict, diversificados: list) -> dict:
-    """
-    Calcula el IGSM total de una municipalidad.
+    """Calculate the total IGSM score for a municipality.
 
-    Metodología CGR:
-    1. Solo se incluyen servicios donde la municipalidad tiene al menos una respuesta
-    2. Pesos por indicador = peso_etapa / n_total_indicadores_en_etapa (solo servicios con respuestas)
-    3. Score = Σ(valor_ind × peso_ind)
+    Only services with at least one response are included. Indicator weights are
+    derived from the official stage weights divided by the number of scored
+    indicators in each stage.
 
-    Retorna dict con score_total, nivel, detalle por servicio y etapa.
+    Args:
+        respuestas: Mapping from indicator code to submitted value.
+        diversificados: Diversified service keys applicable to the municipality.
+
+    Returns:
+        Municipality score summary with total score, maturity level, percentage,
+        service detail, and indicator counts.
     """
+
     from data.indicators import get_servicios_para_municipalidad
 
     servicios_candidatos = get_servicios_para_municipalidad(diversificados)
@@ -143,10 +165,17 @@ def calcular_igsm_municipalidad(respuestas: dict, diversificados: list) -> dict:
 
 
 def calcular_consistencia(respuestas: dict, diversificados: list) -> dict:
+    """Calculate internal consistency alerts for submitted responses.
+
+    Args:
+        respuestas: Mapping from indicator code to submitted value.
+        diversificados: Diversified service keys applicable to the municipality.
+
+    Returns:
+        Consistency summary with detected inconsistencies, count, score, and
+        status label.
     """
-    Índice de consistencia interna: detecta inconsistencias lógicas en las respuestas.
-    Retorna lista de inconsistencias encontradas.
-    """
+
     inconsistencias = []
 
     # Regla 1: No puede tener plan sin brindar el servicio
@@ -190,10 +219,16 @@ def calcular_consistencia(respuestas: dict, diversificados: list) -> dict:
 
 
 def detectar_anomalia_historica(score_actual: float, historial: list) -> dict:
+    """Detect whether the current score is anomalous against history.
+
+    Args:
+        score_actual: Current IGSM score in the 0-1 range.
+        historial: Previous IGSM scores ordered chronologically.
+
+    Returns:
+        Anomaly summary with variation metrics and a display message.
     """
-    Detecta si el score actual es una anomalía respecto al historial.
-    historial: lista de scores anteriores [score_2023, score_2024, ...]
-    """
+
     if len(historial) < 1:
         return {"es_anomalia": False, "mensaje": "Sin historial suficiente"}
 

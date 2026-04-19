@@ -1,3 +1,5 @@
+"""Municipal portal home view."""
+
 # views/muni_home.py — Página de inicio del portal municipal
 
 import streamlit as st
@@ -6,6 +8,13 @@ from components.charts import historico_lineas, comparacion_servicios_bar, radar
 from data.db_layer import get_ranking
 
 def show():
+    """Render the municipal home page.
+
+    The page reads the active municipality from Streamlit session state, shows
+    submission status, score KPIs, history, service charts, and navigation to
+    the IGSM form.
+    """
+
     nombre = st.session_state.get("municipalidad", "Municipalidad")
     ranking = get_ranking()
     data = next((m for m in ranking if m["municipalidad"] == nombre), None)

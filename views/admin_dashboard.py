@@ -1,3 +1,5 @@
+"""National dashboard view for the Contraloria portal."""
+
 # views/admin_dashboard.py — Dashboard nacional de la Contraloría
 
 import streamlit as st
@@ -10,6 +12,12 @@ from components.charts import (
 from data.db_layer import get_ranking, get_estadisticas_nacionales, get_scores_por_servicio_nacional, get_historial_nacional
 
 def show():
+    """Render the national IGSM dashboard.
+
+    The page loads ranking and national statistics, renders KPI cards, charts,
+    filters, a complete ranking table, and a CSV download button in Streamlit.
+    """
+
     page_header("Dashboard Nacional IGSM 2025", "Contraloría General de la República · Visión general del sector municipal", "📊")
 
     ranking = get_ranking()
@@ -133,5 +141,14 @@ def show():
 
 
 def _nivel(score: float) -> str:
+    """Classify a score into a maturity level.
+
+    Args:
+        score: IGSM score in the 0-1 range.
+
+    Returns:
+        Maturity level label.
+    """
+
     from data.indicators import clasificar_nivel
     return clasificar_nivel(score)

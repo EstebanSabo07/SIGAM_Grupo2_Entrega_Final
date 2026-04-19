@@ -1,3 +1,5 @@
+"""Mock IGSM data used by legacy and fallback view flows."""
+
 # data/mock_data.py — Datos simulados basados en resultados reales IGSM 2025
 # Distribución real 2025: 7 Inicial (8%), 57 Básico (68%), 20 Intermedio (24%)
 
@@ -8,6 +10,15 @@ from data.indicators import clasificar_nivel
 random.seed(42)
 
 def _score_en_rango(nivel_objetivo: str) -> float:
+    """Generate a random score inside a maturity-level range.
+
+    Args:
+        nivel_objetivo: Target maturity level.
+
+    Returns:
+        Random score in the 0-1 range.
+    """
+
     rangos = {
         "Inicial":     (0.05, 0.30),
         "Básico":      (0.31, 0.55),
@@ -41,10 +52,28 @@ _SCORES_SERVICIO_BASE = {
 }
 
 def _generar_score_servicio(base: float, variacion: float = 0.15) -> float:
+    """Generate a bounded service score around a base value.
+
+    Args:
+        base: Base score in the 0-1 range.
+        variacion: Maximum random variation applied in either direction.
+
+    Returns:
+        Service score clipped to the 0-1 range.
+    """
+
     return round(max(0, min(1, base + random.uniform(-variacion, variacion))), 4)
 
 def _generar_historial(score_actual: float) -> list:
-    """Genera historial 2022-2024 coherente con el score actual."""
+    """Generate a plausible 2022-2024 score history.
+
+    Args:
+        score_actual: Current score used as the trend anchor.
+
+    Returns:
+        Three historical scores ordered from 2022 to 2024.
+    """
+
     hist = []
     s = score_actual + random.uniform(-0.12, -0.02)
     for _ in range(3):
@@ -106,21 +135,52 @@ for i, m in enumerate(MOCK_RANKING):
 # ── Funciones de acceso ───────────────────────────────────────────────────────
 
 def get_ranking() -> list:
+    """Return the mock national ranking.
+
+    Returns:
+        List of mock municipality records ordered by score.
+    """
+
     return MOCK_RANKING
 
 def get_municipalidad_data(nombre: str) -> dict:
+    """Return a mock municipality record by name.
+
+    Args:
+        nombre: Municipality display name.
+
+    Returns:
+        Matching municipality record, or None when not found.
+    """
+
     for m in MOCK_RANKING:
         if m["municipalidad"] == nombre:
             return m
     return None
 
 def get_municipalidad_by_codigo(codigo: str) -> dict:
+    """Return a mock municipality record by code.
+
+    Args:
+        codigo: Municipality code.
+
+    Returns:
+        Matching municipality record, or None when not found.
+    """
+
     for m in MOCK_RANKING:
         if m["codigo"] == codigo:
             return m
     return None
 
 def get_estadisticas_nacionales() -> dict:
+    """Return national statistics calculated from mock data.
+
+    Returns:
+        Mock national totals, participation metrics, score extrema, and level
+        distribution.
+    """
+
     total = len(MOCK_RANKING)
     enviados = sum(1 for m in MOCK_RANKING if m["estado_envio"] == "Enviado")
     scores = [m["score_total"] for m in MOCK_RANKING]
@@ -141,7 +201,12 @@ def get_estadisticas_nacionales() -> dict:
     }
 
 def get_historial_nacional() -> dict:
-    """Datos históricos nacionales 2022-2025."""
+    """Return mock national historical data for 2022-2025.
+
+    Returns:
+        Mapping from year to average score and maturity-level counts.
+    """
+
     return {
         "2022": {"promedio": 0.37, "Inicial": 12, "Básico": 58, "Intermedio": 14, "Avanzado": 0, "Optimizando": 0},
         "2023": {"promedio": 0.39, "Inicial": 10, "Básico": 56, "Intermedio": 16, "Avanzado": 0, "Optimizando": 0},
@@ -150,7 +215,12 @@ def get_historial_nacional() -> dict:
     }
 
 def get_scores_por_servicio_nacional() -> dict:
-    """Promedio nacional por servicio."""
+    """Return mock national average scores by service.
+
+    Returns:
+        Mapping from service name to average score.
+    """
+
     promedios = {}
     for serv in _SCORES_SERVICIO_BASE:
         vals = [m["servicios"].get(serv, 0) for m in MOCK_RANKING if serv in m["servicios"]]

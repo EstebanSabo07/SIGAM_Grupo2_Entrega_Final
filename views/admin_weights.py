@@ -1,3 +1,5 @@
+"""Stage-weight management view for the Contraloria portal."""
+
 # views/admin_weights.py — Gestión de pesos del índice IGSM
 
 import streamlit as st
@@ -7,6 +9,13 @@ from data.indicators import PESOS_ETAPA
 from data.db_layer import get_weights, save_weights
 
 def show():
+    """Render the IGSM weight management page.
+
+    The page loads effective weights into Streamlit session state, provides
+    controls for saving new stage weights, simulates ranking impact, and renders
+    the local version history.
+    """
+
     page_header("Gestión de Pesos", "Configure los pesos del índice IGSM y simule el impacto en el ranking", "⚖️")
 
     # Estado de pesos en sesión — carga pesos vigentes desde BD

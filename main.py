@@ -1,3 +1,5 @@
+"""Streamlit entrypoint and session-state router for SIGAM."""
+
 # main.py — SIGAM · Sistema Integrado de Gestión y Análisis Municipal
 # Punto de entrada principal con enrutamiento basado en session_state
 

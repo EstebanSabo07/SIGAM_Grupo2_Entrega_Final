@@ -1,3 +1,5 @@
+"""Municipal IGSM form view."""
+
 # views/muni_form.py — Formulario IGSM por servicio con guardado parcial
 
 import streamlit as st
@@ -11,6 +13,13 @@ from data.calculation import calcular_igsm_municipalidad, calcular_consistencia
 from data.db_layer import save_responses, load_responses
 
 def show():
+    """Render the municipal IGSM form workflow.
+
+    The page loads municipality context and previous responses from Streamlit
+    session state, renders one applicable service at a time, updates in-memory
+    form responses, and routes to the summary screen before submission.
+    """
+
     nombre = st.session_state.get("municipalidad", "Municipalidad")
     diversificados = st.session_state.get("diversificados", [])
 
@@ -137,7 +146,13 @@ def show():
 
 
 def _render_indicador(ind: dict, serv_nombre: str):
-    """Renderiza un indicador según su tipo."""
+    """Render one indicator input according to its configured type.
+
+    Args:
+        ind: Indicator metadata dictionary.
+        serv_nombre: Service name that owns the indicator.
+    """
+
     codigo = ind["codigo"]
     nombre = ind["nombre"]
     tipo   = ind["tipo"]
@@ -223,7 +238,13 @@ def _render_indicador(ind: dict, serv_nombre: str):
 
 
 def _mostrar_resumen(nombre: str, diversificados: list):
-    """Pantalla de resumen y confirmación antes de enviar."""
+    """Render the review and confirmation screen before submission.
+
+    Args:
+        nombre: Municipality display name.
+        diversificados: Diversified service keys applicable to the municipality.
+    """
+
     respuestas = st.session_state.get("form_respuestas", {})
 
     page_header("Resumen del Formulario", "Revise su información antes de enviar", "📊")

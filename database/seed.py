@@ -99,7 +99,11 @@ def seed_municipalities(session: Session) -> None:
 
 
 def seed_igsm_structure(session: Session) -> None:
-    """Seed IGSM axes, services, stages, and indicators from source CSV."""
+    """Seed IGSM axes, services, stages, and indicators from source CSV.
+
+    Args:
+        session: Active SQLAlchemy session.
+    """
 
     from database.import_source_baseline import DEFAULT_SOURCE_DIR, _read_dictionary, _upsert_igsm_structure
 

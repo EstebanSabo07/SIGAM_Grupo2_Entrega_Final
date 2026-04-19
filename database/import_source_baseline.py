@@ -55,6 +55,20 @@ DIVERSIFIED_KEYS = {
 
 @dataclass(frozen=True)
 class SourceIndicator:
+    """Indicator row parsed from the source dictionary CSV.
+
+    Attributes:
+        code: Official indicator code.
+        name: Indicator display name.
+        grouping: Normalized grouping label.
+        axis: Axis display name.
+        axis_code: Official axis code.
+        service: Service display name.
+        service_code: Official service code derived from the indicator code.
+        stage: Stage display name.
+        diversified_key: Diversified-service key when applicable.
+    """
+
     code: str
     name: str
     grouping: str
@@ -68,6 +82,14 @@ class SourceIndicator:
 
 @dataclass(frozen=True)
 class SourceValue:
+    """Numeric source response parsed from the results CSV.
+
+    Attributes:
+        municipality_code: Municipality code matched from source labels.
+        indicator_code: Indicator code.
+        value: Numeric response value.
+    """
+
     municipality_code: str
     indicator_code: str
     value: float
@@ -75,6 +97,18 @@ class SourceValue:
 
 @dataclass(frozen=True)
 class SourceMunicipality:
+    """Municipality metadata parsed from baseline results.
+
+    Attributes:
+        code: Municipality code.
+        name: Municipality name from the source or reference catalog.
+        province: Province name.
+        region: Planning region name.
+        latitude: Latitude from the reference catalog.
+        longitude: Longitude from the reference catalog.
+        diversified_keys: Diversified-service keys assigned to the municipality.
+    """
+
     code: str
     name: str
     province: str | None
@@ -96,6 +130,21 @@ def load_source_baseline(
     The import is intentionally idempotent by default: previous fact rows
     created by this source-baseline importer are replaced while unrelated facts
     are left untouched.
+
+    Args:
+        period: Submission period label assigned to the summary.
+        replace: Whether to replace existing baseline fact rows.
+        source_dir: Optional directory containing the source CSV files.
+        database_url: Optional database URL override.
+        dry_run: Whether to validate and summarize without writing to the
+            database.
+
+    Returns:
+        Import summary with source counts, database counts, and write counts.
+
+    Raises:
+        ValueError: If the CSV contents are invalid or reference unknown codes.
+        FileNotFoundError: If required source CSV files are missing.
     """
 
     source_path = Path(source_dir) if source_dir is not None else DEFAULT_SOURCE_DIR
@@ -181,6 +230,19 @@ def load_source_baseline(
 
 
 def _read_dictionary(path: Path) -> list[SourceIndicator]:
+    """Read and validate the indicator dictionary CSV.
+
+    Args:
+        path: Path to ``dictionary.csv``.
+
+    Returns:
+        Parsed source indicator rows.
+
+    Raises:
+        ValueError: If required fields are missing or invalid.
+        FileNotFoundError: If the CSV file is missing.
+    """
+
     required = {"Código", "Indicador", "Agrupación", "Eje", "Servicio", "Etapa"}
     rows = _read_csv_rows(path, required)
     indicators: list[SourceIndicator] = []
@@ -231,6 +293,22 @@ def _read_results(
     indicators_by_code: dict[str, SourceIndicator],
     municipality_lookup: dict[str, str],
 ) -> tuple[list[SourceValue], dict[str, int]]:
+    """Read and validate baseline result values.
+
+    Args:
+        path: Path to the long-form results CSV.
+        indicators_by_code: Source indicators keyed by indicator code.
+        municipality_lookup: Municipality code lookup keyed by normalized labels.
+
+    Returns:
+        Parsed source values and row-count statistics.
+
+    Raises:
+        ValueError: If the file references unknown indicators or nonnumeric
+            values.
+        FileNotFoundError: If the CSV file is missing.
+    """
+
     required = {"Municipalidad", "Código", "Valor", "Cantón"}
     rows = _read_csv_rows(path, required)
     values: list[SourceValue] = []
@@ -267,6 +345,20 @@ def _read_results(
 
 
 def _read_csv_rows(path: Path, required_columns: set[str]) -> list[dict[str, str]]:
+    """Read a CSV file as dictionaries and validate required columns.
+
+    Args:
+        path: CSV file path.
+        required_columns: Column names that must exist in the file.
+
+    Returns:
+        CSV rows with missing cell values normalized to empty strings.
+
+    Raises:
+        FileNotFoundError: If the file does not exist.
+        ValueError: If required columns are missing.
+    """
+
     if not path.exists():
         raise FileNotFoundError(f"Source CSV not found: {path}")
 
@@ -281,6 +373,18 @@ def _read_csv_rows(path: Path, required_columns: set[str]) -> list[dict[str, str
 
 
 def _service_code_from_indicator_code(code: str) -> str:
+    """Derive a service code from an indicator code.
+
+    Args:
+        code: Dot-separated indicator code.
+
+    Returns:
+        First three code segments joined as a service code.
+
+    Raises:
+        ValueError: If the indicator code has fewer than three segments.
+    """
+
     parts = code.split(".")
     if len(parts) < 3:
         raise ValueError(f"Indicator code must have at least three segments: {code}")
@@ -288,6 +392,15 @@ def _service_code_from_indicator_code(code: str) -> str:
 
 
 def _normalize_name(value: str) -> str:
+    """Normalize a municipality label for matching.
+
+    Args:
+        value: Raw municipality label.
+
+    Returns:
+        Lowercase ASCII label with punctuation and extra whitespace removed.
+    """
+
     value = value.strip()
     value = re.sub(r"^municipalidad\s+de\s+", "", value, flags=re.IGNORECASE)
     value = unicodedata.normalize("NFKD", value)
@@ -297,6 +410,12 @@ def _normalize_name(value: str) -> str:
 
 
 def _reference_municipalities_by_normalized_name() -> dict[str, dict[str, Any]]:
+    """Build the reference municipality lookup by normalized name.
+
+    Returns:
+        Municipality dictionaries keyed by normalized aliases.
+    """
+
     from data.municipalities import MUNICIPALIDADES
 
     aliases = {
@@ -330,6 +449,19 @@ FALLBACK_MUNICIPALITIES = {
 
 
 def _source_municipalities_from_results(path: Path) -> tuple[dict[str, SourceMunicipality], dict[str, str]]:
+    """Extract municipality metadata and lookup aliases from results.
+
+    Args:
+        path: Path to the long-form results CSV.
+
+    Returns:
+        Source municipalities keyed by code and normalized-name lookup mapping.
+
+    Raises:
+        ValueError: If a source municipality cannot be matched.
+        FileNotFoundError: If the CSV file is missing.
+    """
+
     rows = _read_csv_rows(path, {"Municipalidad", "Código", "Valor", "Cantón"})
     reference_by_name = _reference_municipalities_by_normalized_name()
     source_municipalities: dict[str, SourceMunicipality] = {}
@@ -365,6 +497,19 @@ def _source_municipalities_from_results(path: Path) -> tuple[dict[str, SourceMun
 
 
 def _municipality_code_for_result(row: dict[str, str], municipality_lookup: dict[str, str]) -> str:
+    """Resolve a municipality code for one result row.
+
+    Args:
+        row: CSV result row.
+        municipality_lookup: Municipality code lookup keyed by normalized labels.
+
+    Returns:
+        Matched municipality code.
+
+    Raises:
+        ValueError: If the row cannot be matched to a municipality.
+    """
+
     candidates = [row["Cantón"], row["Municipalidad"]]
     for candidate in candidates:
         code = municipality_lookup.get(_normalize_name(candidate))
@@ -417,6 +562,16 @@ def _derive_diversified_keys(
     values: list[SourceValue],
     dictionary_by_code: dict[str, SourceIndicator],
 ) -> dict[str, set[str]]:
+    """Infer diversified-service keys from submitted source values.
+
+    Args:
+        values: Parsed source response values.
+        dictionary_by_code: Source indicators keyed by indicator code.
+
+    Returns:
+        Diversified-service keys keyed by municipality code.
+    """
+
     diversified: dict[str, set[str]] = {}
     for item in values:
         diversified_key = dictionary_by_code[item.indicator_code].diversified_key
@@ -563,6 +718,8 @@ def _upsert_igsm_structure(session: Session, dictionary: list[SourceIndicator]) 
 
 
 def main() -> None:
+    """Run the source-baseline importer CLI."""
+
     parser = argparse.ArgumentParser(description="Import database/source CSV files as the ORM baseline dataset.")
     parser.add_argument("--period", default="2025", help="Submission period to assign to imported baseline rows.")
     parser.add_argument("--source-dir", default=None, help="Directory containing dictionary.csv and results CSV.")
