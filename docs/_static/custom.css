@@ -70,12 +70,6 @@ a {
     white-space: nowrap;
 }
 
-.sig.sig-object.py .viewcode-link {
-    float: right;
-    margin-left: 1rem;
-    font-size: 0.9em;
-}
-
 .sig.sig-object.py .headerlink {
     margin-left: 0.4rem;
 }

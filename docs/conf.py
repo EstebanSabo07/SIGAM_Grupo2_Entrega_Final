@@ -16,7 +16,7 @@ extensions = [
     "sphinx.ext.autodoc",
     "sphinx.ext.autosummary",
     "sphinx.ext.napoleon",
-    "sphinx.ext.viewcode",
+    "sphinx.ext.githubpages",
 ]
 
 templates_path = ["_templates"]
@@ -27,6 +27,9 @@ html_title = "SIGAM"
 html_logo = "../assets/logo_lead.png"
 html_static_path = ["_static"]
 html_css_files = ["custom.css"]
+html_baseurl = "https://estebansabo07.github.io/SIGAM_Grupo2/"
+html_copy_source = False
+html_show_sourcelink = False
 html_theme_options = {
     "sidebar_hide_name": False,
     "light_css_variables": {
