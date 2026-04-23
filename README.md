@@ -2,13 +2,16 @@
 
 [![Python](https://img.shields.io/badge/Python-3.11-blue)](https://python.org)
 [![Streamlit](https://img.shields.io/badge/Streamlit-1.32+-red)](https://streamlit.io)
-[![Docker](https://img.shields.io/badge/Docker-Cloud_Run-blue)](https://cloud.google.com/run)
+[![Firebase](https://img.shields.io/badge/Auth-Firebase-orange)](https://firebase.google.com)
+[![Cloud Run](https://img.shields.io/badge/Deploy-Google_Cloud_Run-blue)](https://cloud.google.com/run)
 
 Plataforma web para la digitalización y automatización del **Índice de Gestión de Servicios Municipales (IGSM)** de la Contraloría General de la República de Costa Rica.
 
+🌐 **App en producción:** https://sigam-669552465701.us-central1.run.app
+
 ---
 
-## 📋 Información académica
+## Información académica
 
 | Campo | Detalle |
 |-------|---------|
@@ -20,7 +23,7 @@ Plataforma web para la digitalización y automatización del **Índice de Gesti�
 
 ---
 
-## 🚀 Instalación y ejecución local
+## Instalación y ejecución local
 
 ### Requisitos
 - Python 3.11+
@@ -29,153 +32,61 @@ Plataforma web para la digitalización y automatización del **Índice de Gesti�
 ### Pasos
 
 ```bash
-# 1. Clonar el repositorio
-git clone https://github.com/EstebanSabo07/Proyecto-An-lisis-de-datos---Grupo-2-.git
-cd Proyecto-An-lisis-de-datos---Grupo-2-
-
-# 2. Instalar dependencias
+git clone https://github.com/EstebanSabo07/SIGAM_Grupo2_Entrega_Final.git
+cd SIGAM_Grupo2_Entrega_Final
 pip install -r requirements.txt
-
-# 3. Inicializar la base de datos local (SQLite)
 python -m database.init_db
-python -m database.import_source_baseline --period 2025
-
-# 4. Ejecutar
+python -m database.import_source_baseline
 streamlit run main.py
 ```
 
 La aplicación abre en `http://localhost:8501`
 
-### Credenciales de demo
+### Credenciales de acceso
 
 | Rol | Acceso |
 |-----|--------|
-| Municipalidad | Seleccionar municipio + código `1234` |
-| Contraloría | Usuario `contraloria` / contraseña `cgr2025` |
+| Municipalidad | Seleccionar municipio en el dropdown + código `1234` |
+| Contraloría | `admin1sigam@gmail.com` / `123456` |
 
 ---
 
-## 🏗️ Estructura del proyecto
+## Funcionalidades
 
-```
-SIGAM/
-├── main.py                  ← Punto de entrada y enrutador
-├── requirements.txt
-├── Dockerfile               ← Google Cloud Run
-├── assets/
-│   ├── style.css
-│   ├── logo_cgr.svg
-│   └── logo_lead.png
-├── data/
-│   ├── municipalities.py    ← 84 municipalidades con coordenadas
-│   ├── indicators.py        ← Estructura IGSM completa (159 indicadores PT-228)
-│   ├── calculation.py       ← Fórmula oficial CGR
-│   ├── db_layer.py          ← Capa de integración SIGAM ↔ base de datos ORM
-│   └── mock_data.py         ← Datos simulados (histórico y tendencias)
-├── database/                ← ORM SQLAlchemy (dimensional + hechos)
-│   ├── models.py            ← Tablas: dm_municipality, dm_indicator, fact_*
-│   ├── repositories.py      ← API de persistencia y consulta
-│   ├── session.py           ← Engine y session_scope
-│   ├── config.py            ← DATABASE_URL (SQLite local / PostgreSQL prod)
-│   ├── init_db.py           ← Creación de esquema y datos de referencia
-│   ├── import_source_baseline.py ← Carga de resultados CGR 2025
-│   ├── seed.py              ← Siembra de pesos y umbrales
-│   ├── data_model.sql       ← Documentación del esquema dimensional
-│   └── source/
-│       ├── dictionary.csv              ← Catálogo de indicadores
-│       └── igsm_2025_results_long.csv  ← 8 840 respuestas reales CGR 2025
-├── components/
-│   ├── ui.py                ← Componentes reutilizables
-│   └── charts.py            ← Visualizaciones Plotly
-└── views/
-    ├── landing.py           ← Página pública
-    ├── login.py             ← Autenticación
-    ├── muni_home.py         ← Portal municipalidad
-    ├── muni_form.py         ← Formulario IGSM (guarda en BD)
-    ├── muni_results.py      ← Resultados municipales (desde BD)
-    ├── admin_dashboard.py   ← Dashboard Contraloría (datos reales)
-    ├── admin_municipalities.py
-    ├── admin_analysis.py    ← Geo · Clústeres · SEM · Correlación
-    ├── admin_weights.py     ← Gestión de pesos (persiste en BD)
-    └── admin_export.py      ← Exportación y publicación
-```
-
----
-
-## 🗄️ Base de datos
-
-La capa de datos usa **SQLAlchemy ORM** con un modelo dimensional:
-
-| Tabla | Descripción |
-|-------|-------------|
-| `dm_municipality` | 84 municipalidades con provincia, región y coordenadas |
-| `dm_axis` | 4 ejes de gestión IGSM |
-| `dm_service` | 10 servicios municipales |
-| `dm_stage` | 3 etapas: Planificación, Ejecución, Evaluación |
-| `dm_indicator` | 159 indicadores oficiales (PT-228 CGR) |
-| `fact_indicator_response` | Respuestas por municipalidad e indicador con timestamp |
-| `fact_stage_weight` | Pesos de etapa con fecha de vigencia |
-| `fact_maturity_threshold` | Umbrales de madurez con fecha de vigencia |
-
-**Desarrollo local:** SQLite en `database/igsm_dev.sqlite3`  
-**Producción:** PostgreSQL via variable de entorno `DATABASE_URL`
-
-```bash
-# Usar PostgreSQL
-export DATABASE_URL="postgresql+psycopg://user:password@host:5432/dbname"
-python -m database.init_db
-python -m database.import_source_baseline --period 2025
-```
-
-Los datos del baseline incluyen **8 840 respuestas reales** del informe CGR 2025 (84 municipalidades × 159 indicadores menos municipalidades con servicios diversificados no aplicables).
-
----
-
-## 📊 Funcionalidades principales
-
-- ✅ Formulario IGSM digital con 159 indicadores (replicación exacta CGR 2025, PT-228)
-- ✅ Cálculo automático del índice con fórmula oficial
+- ✅ Formulario IGSM digital con 159 indicadores (replicación exacta PT-228 CGR 2025)
+- ✅ Cálculo automático del IGSM: `0.50×Plan + 0.30×Ejec + 0.20×Eval`
 - ✅ 5 niveles de madurez: Inicial · Básico · Intermedio · Avanzado · Optimizando
-- ✅ Validación de consistencia en tiempo real
-- ✅ Detección de anomalías históricas (>15% variación)
-- ✅ Carga de evidencias por indicador
-- ✅ Dashboard nacional con ranking de 84 municipalidades (datos reales 2025)
-- ✅ Análisis geoespacial (mapa interactivo)
+- ✅ Ranking nacional de 84 municipalidades con datos reales (Heredia #1 · Puerto Jiménez #84)
+- ✅ Validación de consistencia lógica de respuestas en tiempo real
+- ✅ Detección de anomalías históricas (variación >15%)
+- ✅ Dashboard nacional con KPIs, distribución por nivel y heatmap región × servicio
+- ✅ Análisis por municipalidad con comparación, radar por servicio e historial
+- ✅ Análisis geoespacial (mapa interactivo de Costa Rica)
 - ✅ Análisis de clústeres (K-Means + PCA)
-- ✅ Modelo de Ecuaciones Estructurales (SEM)
-- ✅ Análisis de correlaciones por servicio
-- ✅ Exportación CSV y Excel multi-hoja
-- ✅ Simulador de pesos del índice (persiste en BD)
-- ✅ Historial de respuestas por municipalidad con corte por fecha
+- ✅ Correlaciones por servicio y modelo SEM
+- ✅ Exportación Excel multi-hoja (nacional e individual por municipalidad)
+- ✅ Simulador de pesos del índice
+- ✅ Autenticación Firebase para panel de Contraloría
+- ✅ Desplegado en Google Cloud Run
 
 ---
 
-## 🐳 Despliegue en Google Cloud Run
+## Despliegue en Google Cloud Run
 
 ```bash
-# Build y deploy
 gcloud run deploy sigam \
   --source . \
   --region us-central1 \
+  --platform managed \
   --allow-unauthenticated \
-  --port 8080 \
-  --set-env-vars DATABASE_URL="postgresql+psycopg://user:password@host:5432/dbname"
+  --memory 1Gi \
+  --port 8080
 ```
 
----
-
-## 🔮 Integración futura
-
-| Componente | Tecnología | Estado |
-|------------|-----------|--------|
-| Autenticación | Firebase Authentication / Auth0 | 🔜 Pendiente |
-| Base de datos en nube | Cloud SQL (PostgreSQL) | 🔜 Pendiente |
-| Analítica avanzada | BigQuery | 🔜 Pendiente |
-| Archivos y evidencias | Cloud Storage | 🔜 Pendiente |
-| Integración CGR | Envío digital de informes | 🔜 Pendiente |
+El `entrypoint.sh` inicializa automáticamente la base de datos desde los CSV fuente al arrancar.
 
 ---
 
-## 📄 Licencia
+## Licencia
 
 Proyecto académico — LEAD University / CGR Costa Rica · 2025
