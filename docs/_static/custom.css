@@ -1,0 +1,102 @@
+:root {
+    --sigam-blue: #1A3A6B;
+    --sigam-orange: #E87722;
+    --sigam-border: #DDE6F2;
+}
+
+.content {
+    line-height: 1.65;
+}
+
+.article-container {
+    max-width: 980px;
+}
+
+.sidebar-brand-text {
+    font-weight: 800;
+    letter-spacing: 0;
+}
+
+.sidebar-logo {
+    max-width: 9rem;
+    margin-bottom: 0.6rem;
+}
+
+h1 {
+    color: var(--sigam-blue);
+    font-weight: 800;
+    letter-spacing: 0;
+}
+
+h2,
+h3 {
+    font-weight: 700;
+    letter-spacing: 0;
+}
+
+a {
+    text-underline-offset: 0.16em;
+}
+
+.toctree-wrapper ul {
+    line-height: 1.7;
+}
+
+.sig.sig-object.py {
+    display: block;
+    margin: 1.35rem 0 0.45rem;
+    padding: 0.65rem 0.85rem;
+    overflow-x: auto;
+    border: 1px solid var(--sigam-border);
+    border-left: 4px solid var(--sigam-blue);
+    border-radius: 8px;
+    background: color-mix(in srgb, var(--sigam-blue) 5%, transparent);
+    line-height: 1.55;
+    text-indent: 0;
+    white-space: normal;
+}
+
+.sig.sig-object.py .sig-prename,
+.sig.sig-object.py .property {
+    color: #536579;
+}
+
+.sig.sig-object.py .sig-name {
+    color: var(--sigam-blue);
+    font-weight: 800;
+}
+
+.sig.sig-object.py .sig-param {
+    white-space: nowrap;
+}
+
+.sig.sig-object.py .headerlink {
+    margin-left: 0.4rem;
+}
+
+code.literal {
+    border-radius: 5px;
+    padding: 0.08rem 0.28rem;
+}
+
+div[class^="highlight"] {
+    border-radius: 8px;
+    border: 1px solid var(--sigam-border);
+}
+
+table.docutils {
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+table.docutils thead {
+    background: color-mix(in srgb, var(--sigam-blue) 10%, transparent);
+}
+
+.admonition {
+    border-radius: 8px;
+}
+
+.prev-next-area a {
+    border-radius: 8px;
+}

@@ -1,0 +1,52 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Entornos virtuales
+venv/
+env/
+.env
+.venv/
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Credenciales y secretos
+*.json
+serviceAccountKey.json
+firebase-key.json
+.env.local
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Bases de datos locales generadas
+*.sqlite
+*.sqlite3
+*.db
+database/igsm_dev.sqlite3
+
+# Archivos temporales de uploads
+uploads/
+temp/
+.test_tmp/
