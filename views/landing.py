@@ -42,7 +42,7 @@ def show():
     # ── Hero ──────────────────────────────────────────────────────────────────
     st.markdown(f"""
     <div class="landing-hero">
-        <div class="landing-tag">BETA · IGSM 2025</div>
+        <div class="landing-tag">IGSM 2025</div>
         <h1>SIGAM</h1>
         <div style="width:100%; text-align:center; font-size:1.15rem; font-weight:300;
                     color:rgba(255,255,255,0.9); margin:0.4rem 0 0.8rem;">
