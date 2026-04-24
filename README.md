@@ -8,6 +8,7 @@
 Plataforma web para la digitalización y automatización del **Índice de Gestión de Servicios Municipales (IGSM)** de la Contraloría General de la República de Costa Rica.
 
 🌐 **App en producción:** https://sigam-669552465701.us-central1.run.app
+-  **Referencia técnica (Sphinx):** https://estebansabo07.github.io/SIGAM_Grupo2_Entrega_Final/
 
 ---
 
