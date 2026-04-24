@@ -66,4 +66,8 @@ autodoc_mock_imports = [
     "sklearn",
     "sqlalchemy",
     "openpyxl",
+    "pyrebase",
+    "pyrebase4",
+    "requests",
+    "firebase_admin",
 ]
