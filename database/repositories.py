@@ -10,12 +10,16 @@ from sqlalchemy import Select, func, select
 from sqlalchemy.orm import Session, joinedload
 
 from database.models import (
+    DMAxis,
     DMIndicator,
     DMMunicipality,
     DMMunicipalityDiversifiedService,
     DMService,
+    DMStage,
+    FactIndicatorEvidence,
     FactIndicatorResponse,
     FactMaturityThreshold,
+    FactServiceReviewStatus,
     FactStageWeight,
     utcnow,
 )
@@ -855,3 +859,221 @@ def get_municipality_completion_statistics(
             "respuestas_recibidas": received_responses,
             "pct_completitud": _completion_percentage(received_responses, expected_responses),
         }
+
+
+def get_form_catalog(municipality_code: str, session: Session | None = None) -> list[dict[str, Any]]:
+    """Return the IGSM catalog tree rows that apply to one municipality.
+
+    Args:
+        municipality_code: Municipal code.
+        session: Optional SQLAlchemy session.
+
+    Returns:
+        Ordered catalog rows with axis, service, stage, and indicator metadata.
+    """
+
+    with _managed_session(session) as db:
+        municipality = _municipality_or_raise(db, municipality_code)
+        diversified_service_ids = _applicable_service_ids(municipality)
+        statement = (
+            select(DMIndicator)
+            .options(
+                joinedload(DMIndicator.service).joinedload(DMService.axis),
+                joinedload(DMIndicator.stage),
+            )
+            .join(DMIndicator.service)
+            .join(DMService.axis)
+            .join(DMIndicator.stage)
+            .order_by(DMAxis.name, DMService.service_code, DMStage.name, DMIndicator.code)
+        )
+        indicators = db.execute(statement).unique().scalars()
+        rows: list[dict[str, Any]] = []
+        for indicator in indicators:
+            service = indicator.service
+            if service is None:
+                continue
+            if service.grouping != "Básico" and service.service_id not in diversified_service_ids:
+                continue
+            axis = service.axis
+            stage = indicator.stage
+            rows.append(
+                {
+                    "axis_id": axis.axis_id if axis else None,
+                    "axis_name": axis.name if axis else None,
+                    "service_id": service.service_id,
+                    "service_code": service.service_code,
+                    "service_name": service.name,
+                    "service_grouping": service.grouping,
+                    "diversified_key": service.diversified_key,
+                    "stage_id": stage.stage_id if stage else None,
+                    "stage_name": stage.name if stage else None,
+                    "indicator_id": indicator.indicator_id,
+                    "indicator_code": indicator.code,
+                    "indicator_name": indicator.name,
+                    "indicator_type": indicator.type,
+                    "evidence_required": bool(indicator.evidence_required),
+                    "documentation": indicator.documentation,
+                }
+            )
+        return rows
+
+
+def get_latest_indicator_snapshots(
+    municipality_code: str,
+    end_date: EndDate = None,
+    session: Session | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Return the latest snapshot row for each indicator in one municipality.
+
+    Args:
+        municipality_code: Municipal code.
+        end_date: Optional inclusive cutoff date.
+        session: Optional SQLAlchemy session.
+
+    Returns:
+        Mapping from indicator code to snapshot metadata.
+    """
+
+    with _managed_session(session) as db:
+        municipality = _municipality_or_raise(db, municipality_code)
+        statement = (
+            select(FactIndicatorResponse)
+            .options(
+                joinedload(FactIndicatorResponse.indicator),
+                joinedload(FactIndicatorResponse.evidence_items),
+            )
+            .where(FactIndicatorResponse.municipality_id == municipality.municipality_id)
+            .order_by(FactIndicatorResponse.date_time.desc(), FactIndicatorResponse.response_id.desc())
+        )
+        statement = _end_date_filter(statement, end_date)
+        snapshots: dict[str, dict[str, Any]] = {}
+        for response in db.execute(statement).unique().scalars():
+            indicator = response.indicator
+            if indicator is None or indicator.code in snapshots:
+                continue
+            snapshots[indicator.code] = {
+                "response_id": response.response_id,
+                "indicator_code": indicator.code,
+                "indicator_id": indicator.indicator_id,
+                "value": float(response.value),
+                "date_time": response.date_time,
+                "evidence_files": [
+                    {
+                        "evidence_id": evidence.evidence_id,
+                        "file_name": evidence.file_name,
+                        "file_type": evidence.file_type,
+                        "uploaded_at": evidence.uploaded_at,
+                    }
+                    for evidence in response.evidence_items
+                ],
+            }
+        return snapshots
+
+
+def save_indicator_response_versions(
+    municipality_code: str,
+    responses: list[dict[str, Any]],
+    submitted_at: EndDate,
+    actor_subject: str | None = None,
+    session: Session | None = None,
+) -> dict[str, Any]:
+    """Persist new response versions and evidence metadata for a municipality.
+
+    Args:
+        municipality_code: Municipal code.
+        responses: Response payload rows.
+        submitted_at: Timestamp assigned to the new version rows.
+        actor_subject: Optional actor identifier stored for compatibility.
+        session: Optional SQLAlchemy session.
+
+    Returns:
+        Summary of stored response ids and row counts.
+    """
+
+    _ = actor_subject
+    with _managed_session(session) as db:
+        municipality = _municipality_or_raise(db, municipality_code)
+        indicators = {row.code: row for row in db.execute(select(DMIndicator)).scalars()}
+        timestamp = _timestamp_for_end_date(submitted_at)
+        saved_response_ids: list[int] = []
+
+        for row in responses:
+            indicator = indicators.get(str(row.get("indicator_code", "")))
+            if indicator is None:
+                continue
+            response = FactIndicatorResponse(
+                date_time=timestamp,
+                municipality_id=municipality.municipality_id,
+                indicator_id=indicator.indicator_id,
+                value=float(row.get("value", 0.0)),
+            )
+            db.add(response)
+            db.flush()
+            for evidence in row.get("evidence_files", []):
+                file_name = str(evidence.get("file_name", "")).strip()
+                if not file_name:
+                    continue
+                db.add(
+                    FactIndicatorEvidence(
+                        response_id=response.response_id,
+                        file_name=file_name,
+                        file_type=evidence.get("file_type"),
+                        uploaded_at=timestamp,
+                    )
+                )
+            saved_response_ids.append(response.response_id)
+
+        db.flush()
+        return {
+            "municipality_code": municipality.code,
+            "submitted_at": _date_label(submitted_at),
+            "response_ids": saved_response_ids,
+            "saved_rows": len(saved_response_ids),
+        }
+
+
+def get_service_review_statuses(
+    municipality_code: str,
+    end_date: EndDate = None,
+    session: Session | None = None,
+) -> dict[str, dict[str, Any]]:
+    """Return the latest active review status by service code.
+
+    Args:
+        municipality_code: Municipal code.
+        end_date: Optional inclusive cutoff date.
+        session: Optional SQLAlchemy session.
+
+    Returns:
+        Mapping from service code to review-status metadata.
+    """
+
+    cutoff = _end_datetime(end_date)
+    with _managed_session(session) as db:
+        municipality = _municipality_or_raise(db, municipality_code)
+        statement = (
+            select(FactServiceReviewStatus)
+            .options(joinedload(FactServiceReviewStatus.service))
+            .where(
+                FactServiceReviewStatus.municipality_id == municipality.municipality_id,
+                FactServiceReviewStatus.created_at <= cutoff,
+            )
+            .order_by(
+                FactServiceReviewStatus.created_at.desc(),
+                FactServiceReviewStatus.review_status_id.desc(),
+            )
+        )
+        statuses: dict[str, dict[str, Any]] = {}
+        for row in db.execute(statement).unique().scalars():
+            service = row.service
+            if service is None or service.service_code in statuses:
+                continue
+            if row.resolved_at is not None and row.resolved_at <= cutoff:
+                continue
+            statuses[service.service_code] = {
+                "status": row.status,
+                "note": row.note,
+                "created_at": row.created_at,
+                "resolved_at": row.resolved_at,
+            }
+        return statuses

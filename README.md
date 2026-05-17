@@ -46,12 +46,30 @@ streamlit run main.py
 
 La aplicación abre en `http://localhost:8501`
 
-### Credenciales de demo
+### Nota sobre el PDF formal
+
+La exportación PDF pública y municipal usa `reportlab` y depende del **mismo intérprete de Python que ejecuta Streamlit**. Para evitar que salga un PDF degradado o inválido:
+
+```bash
+# Recomendado: usar el mismo Python para instalar dependencias y arrancar Streamlit
+python -m pip install -r requirements.txt
+python -m streamlit run main.py
+```
+
+Si en su equipo `streamlit` apunta a otro entorno distinto, verifique primero qué ejecutable está usando y luego instale `reportlab` en ese mismo entorno.
+
+```bash
+where streamlit
+python -c "import sys, reportlab; print(sys.executable); print(reportlab.__version__)"
+```
+
+### Accesos de demo
 
 | Rol | Acceso |
 |-----|--------|
-| Municipalidad | Seleccionar municipio + código `1234` |
-| Contraloría | Usuario `contraloria` / contraseña `cgr2025` |
+| Ciudadanía | `http://localhost:8501` |
+| Municipalidad | `http://localhost:8501/?portal=municipal` |
+| Contraloría | `http://localhost:8501/?portal=admin` |
 
 ---
 
@@ -68,10 +86,14 @@ SIGAM/
 │   └── logo_lead.png
 ├── data/
 │   ├── municipalities.py    ← 84 municipalidades con coordenadas
-│   ├── indicators.py        ← Estructura IGSM completa (159 indicadores PT-228)
+│   ├── indicators.py        ← Metadatos de transición y clasificación de niveles
 │   ├── calculation.py       ← Fórmula oficial CGR
-│   ├── db_layer.py          ← Capa de integración SIGAM ↔ base de datos ORM
-│   └── mock_data.py         ← Datos simulados (histórico y tendencias)
+│   ├── snapshot.py          ← Contexto Mes-Año y audiencias
+│   ├── catalog_service.py   ← Árbol Eje → Servicio → Etapa desde ORM
+│   ├── response_service.py  ← Lectura y guardado versionado por sección
+│   ├── scoring_service.py   ← Cálculo de snapshots y estados operativos
+│   ├── presentation_service.py ← View-models por audiencia
+│   └── reporting_service.py ← Exportaciones CSV/PDF por snapshot
 ├── database/                ← ORM SQLAlchemy (dimensional + hechos)
 │   ├── models.py            ← Tablas: dm_municipality, dm_indicator, fact_*
 │   ├── repositories.py      ← API de persistencia y consulta
@@ -88,11 +110,11 @@ SIGAM/
 │   ├── ui.py                ← Componentes reutilizables
 │   └── charts.py            ← Visualizaciones Plotly
 └── views/
-    ├── landing.py           ← Página pública
-    ├── login.py             ← Autenticación
+    ├── landing.py           ← Dashboard ciudadano público
+    ├── login.py             ← Acceso privado oculto
     ├── muni_home.py         ← Portal municipalidad
-    ├── muni_form.py         ← Formulario IGSM (guarda en BD)
-    ├── muni_results.py      ← Resultados municipales (desde BD)
+    ├── muni_form.py         ← Formulario navegable con guardado explícito
+    ├── muni_results.py      ← Resultados municipales sin puntajes sensibles
     ├── admin_dashboard.py   ← Dashboard Contraloría (datos reales)
     ├── admin_municipalities.py
     ├── admin_analysis.py    ← Geo · Clústeres · SEM · Correlación
@@ -114,8 +136,10 @@ La capa de datos usa **SQLAlchemy ORM** con un modelo dimensional:
 | `dm_stage` | 3 etapas: Planificación, Ejecución, Evaluación |
 | `dm_indicator` | 159 indicadores oficiales (PT-228 CGR) |
 | `fact_indicator_response` | Respuestas por municipalidad e indicador con timestamp |
+| `fact_indicator_evidence` | Evidencias asociadas a cada versión de respuesta |
 | `fact_stage_weight` | Pesos de etapa con fecha de vigencia |
 | `fact_maturity_threshold` | Umbrales de madurez con fecha de vigencia |
+| `fact_service_review_status` | Estados de revisión/observación por servicio |
 
 **Desarrollo local:** SQLite en `database/igsm_dev.sqlite3`  
 **Producción:** PostgreSQL via variable de entorno `DATABASE_URL`
@@ -133,20 +157,16 @@ Los datos del baseline incluyen **8 840 respuestas reales** del informe CGR 2025
 
 ##  Funcionalidades principales
 
-- ✅ Formulario IGSM digital con 159 indicadores (replicación exacta CGR 2025, PT-228)
-- ✅ Cálculo automático del índice con fórmula oficial
-- ✅ 5 niveles de madurez: Inicial · Básico · Intermedio · Avanzado · Optimizando
-- ✅ Validación de consistencia en tiempo real
-- ✅ Detección de anomalías históricas (>15% variación)
-- ✅ Carga de evidencias por indicador
-- ✅ Dashboard nacional con ranking de 84 municipalidades (datos reales 2025)
-- ✅ Análisis geoespacial (mapa interactivo)
-- ✅ Análisis de clústeres (K-Means + PCA)
-- ✅ Modelo de Ecuaciones Estructurales (SEM)
-- ✅ Análisis de correlaciones por servicio
-- ✅ Exportación CSV y Excel multi-hoja
+- ✅ Snapshot mensual con filtro `Mes-Año` y última respuesta vigente al cierre del mes
+- ✅ Dashboard ciudadano público sin login
+- ✅ Accesos privados ocultos para municipalidades y Contraloría
+- ✅ Formulario navegable por `Eje → Servicio → Etapa`
+- ✅ Guardado explícito por sección, sin autoguardado
+- ✅ Historial de respuestas versionado por indicador
+- ✅ Estados operativos por servicio
+- ✅ Confidencialidad de puntajes para ciudadanía y municipalidades
+- ✅ Exportación CSV/PDF por audiencia
 - ✅ Simulador de pesos del índice (persiste en BD)
-- ✅ Historial de respuestas por municipalidad con corte por fecha
 
 ---
 

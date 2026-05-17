@@ -4,6 +4,7 @@
 # Punto de entrada principal con enrutamiento basado en session_state
 
 import streamlit as st
+from data.snapshot import AUDIENCE_ADMIN, AUDIENCE_MUNICIPAL, AUDIENCE_PUBLIC, current_snapshot
 
 # ── Configuración de página ───────────────────────────────────────────────────
 st.set_page_config(
@@ -22,9 +23,31 @@ if "page" not in st.session_state:
     st.session_state["page"] = "landing"
 if "rol" not in st.session_state:
     st.session_state["rol"] = None
+if "snapshot_year" not in st.session_state or "snapshot_month" not in st.session_state:
+    snapshot = current_snapshot(AUDIENCE_PUBLIC)
+    st.session_state["snapshot_year"] = snapshot.year
+    st.session_state["snapshot_month"] = snapshot.month
+
+portal = st.query_params.get("portal")
+if portal == "municipal" and st.session_state.get("rol") is None:
+    st.session_state["rol_login"] = "municipalidad"
+    st.session_state["page"] = "login"
+elif portal == "admin" and st.session_state.get("rol") is None:
+    st.session_state["rol_login"] = "admin"
+    st.session_state["page"] = "login"
 
 page = st.session_state.get("page", "landing")
 rol  = st.session_state.get("rol")
+
+requested_service = st.query_params.get("service")
+if rol == "municipalidad" and requested_service:
+    st.session_state["form_current_service"] = requested_service
+    st.session_state["page"] = "muni_form"
+    try:
+        del st.query_params["service"]
+    except Exception:
+        pass
+    page = "muni_form"
 
 # ── Enrutador principal ───────────────────────────────────────────────────────
 

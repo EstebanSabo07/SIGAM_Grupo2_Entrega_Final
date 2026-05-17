@@ -135,6 +135,7 @@ class DMService(Base):
     axis: Mapped[DMAxis] = relationship(back_populates="services")
     indicators: Mapped[list["DMIndicator"]] = relationship(back_populates="service", cascade="all, delete-orphan")
     municipality_links: Mapped[list[DMMunicipalityDiversifiedService]] = relationship(back_populates="service")
+    review_statuses: Mapped[list["FactServiceReviewStatus"]] = relationship(back_populates="service")
 
 
 class DMStage(Base):
@@ -202,6 +203,7 @@ class FactIndicatorResponse(Base):
         value: Numeric answer value.
         municipality: Linked municipality row.
         indicator: Linked indicator row.
+        evidence_items: Evidence metadata attached to this response version.
     """
 
     __tablename__ = "fact_indicator_response"
@@ -233,6 +235,79 @@ class FactIndicatorResponse(Base):
 
     municipality: Mapped[DMMunicipality] = relationship(back_populates="responses")
     indicator: Mapped[DMIndicator] = relationship(back_populates="responses")
+    evidence_items: Mapped[list["FactIndicatorEvidence"]] = relationship(
+        back_populates="response",
+        cascade="all, delete-orphan",
+    )
+
+
+class FactIndicatorEvidence(Base):
+    """Evidence metadata attached to one indicator response version.
+
+    Attributes:
+        evidence_id: Primary key.
+        response_id: Parent response primary key.
+        file_name: Uploaded file name.
+        file_type: Optional MIME type or client-declared type.
+        uploaded_at: Timestamp when the evidence metadata was stored.
+        response: Linked response row.
+    """
+
+    __tablename__ = "fact_indicator_evidence"
+
+    evidence_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    response_id: Mapped[int] = mapped_column(
+        ForeignKey("fact_indicator_response.response_id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    file_type: Mapped[str | None] = mapped_column(String(100))
+    uploaded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+
+    response: Mapped[FactIndicatorResponse] = relationship(back_populates="evidence_items")
+
+
+class FactServiceReviewStatus(Base):
+    """Review-status history for one municipality service.
+
+    Attributes:
+        review_status_id: Primary key.
+        municipality_id: Municipality primary key.
+        service_id: Service primary key.
+        status: Review status label.
+        note: Optional review note.
+        created_at: Timestamp when the status was created.
+        resolved_at: Timestamp when the status stopped being active.
+        municipality: Linked municipality row.
+        service: Linked service row.
+    """
+
+    __tablename__ = "fact_service_review_status"
+    __table_args__ = (
+        Index(
+            "ix_fact_service_review_status_lookup",
+            "municipality_id",
+            "service_id",
+            "created_at",
+        ),
+    )
+
+    review_status_id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    municipality_id: Mapped[int] = mapped_column(
+        ForeignKey("dm_municipality.municipality_id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+    service_id: Mapped[int] = mapped_column(
+        ForeignKey("dm_service.service_id", deferrable=True, initially="IMMEDIATE"),
+        nullable=False,
+    )
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
+    note: Mapped[str | None] = mapped_column(String(500))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=utcnow)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+    municipality: Mapped[DMMunicipality] = relationship()
+    service: Mapped[DMService] = relationship(back_populates="review_statuses")
 
 
 class FactStageWeight(Base):

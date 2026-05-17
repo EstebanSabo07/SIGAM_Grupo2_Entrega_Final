@@ -41,7 +41,7 @@ def show():
                 max_chars=4,
             )
 
-            if st.button("Ingresar →", type="primary", use_container_width=True):
+            if st.button("Ingresar →", type="primary", width="stretch"):
                 if not municipalidad:
                     st.error("Seleccione su municipalidad.")
                 elif not codigo:
@@ -55,8 +55,10 @@ def show():
                             st.session_state["rol"]          = "municipalidad"
                             st.session_state["municipalidad"]= municipalidad
                             st.session_state["muni_codigo"]  = muni_data["codigo"]
+                            st.session_state["municipalidad_codigo"] = muni_data["codigo"]
                             st.session_state["diversificados"]= muni_data["diversificados"]
                             st.session_state["page"]         = "muni_home"
+                            st.query_params.clear()
                             st.rerun()
                         else:
                             st.error("Código incorrecto. Para la demo use: **1234**")
@@ -78,10 +80,11 @@ def show():
             usuario = st.text_input("Usuario", placeholder="contraloria")
             clave   = st.text_input("Contraseña", type="password", placeholder="••••••••")
 
-            if st.button("Ingresar →", type="primary", use_container_width=True):
+            if st.button("Ingresar →", type="primary", width="stretch"):
                 if usuario == ADMIN_USUARIO and clave == ADMIN_CLAVE:
                     st.session_state["rol"]  = "admin"
                     st.session_state["page"] = "admin_dashboard"
+                    st.query_params.clear()
                     st.rerun()
                 else:
                     st.error("Credenciales incorrectas. Demo: **contraloria** / **cgr2025**")
@@ -94,6 +97,6 @@ def show():
             """, unsafe_allow_html=True)
 
         st.markdown("---")
-        if st.button("← Volver al inicio", use_container_width=False):
+        if st.button("← Volver al inicio", width="content"):
             st.session_state["page"] = "landing"
             st.rerun()

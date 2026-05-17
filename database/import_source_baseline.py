@@ -652,6 +652,9 @@ def _upsert_igsm_structure(session: Session, dictionary: list[SourceIndicator]) 
         Current table counts for the IGSM structure.
     """
 
+    from data.indicators import build_indicator_metadata_map
+
+    indicator_metadata = build_indicator_metadata_map()
     axes_by_name: dict[str, DMAxis] = {}
     services_by_code: dict[str, DMService] = {}
     stages_by_name: dict[str, DMStage] = {}
@@ -704,9 +707,13 @@ def _upsert_igsm_structure(session: Session, dictionary: list[SourceIndicator]) 
                 name=item.name,
             )
             session.add(indicator)
+        metadata = indicator_metadata.get(item.code, {})
         indicator.service_id = service.service_id
         indicator.stage_id = stage.stage_id
         indicator.name = item.name
+        indicator.type = metadata.get("tipo", "binario")
+        indicator.evidence_required = bool(metadata.get("evidencia", False))
+        indicator.documentation = metadata.get("doc")
 
     session.flush()
     return {

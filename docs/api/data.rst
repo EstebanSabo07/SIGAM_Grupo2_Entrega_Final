@@ -7,19 +7,49 @@ Datos y Calculos
    :private-members:
    :show-inheritance:
 
-.. automodule:: data.db_layer
+.. automodule:: data.catalog_service
+   :members:
+   :undoc-members:
+   :private-members:
+   :show-inheritance:
+
+.. automodule:: data.presentation_service
+   :members:
+   :undoc-members:
+   :private-members:
+   :show-inheritance:
+
+.. automodule:: data.reporting_service
+   :members:
+   :undoc-members:
+   :private-members:
+   :show-inheritance:
+
+.. automodule:: data.response_service
+   :members:
+   :undoc-members:
+   :private-members:
+   :show-inheritance:
+
+.. automodule:: data.scoring_service
+   :members:
+   :undoc-members:
+   :private-members:
+   :show-inheritance:
+
+.. automodule:: data.snapshot
+   :members:
+   :undoc-members:
+   :private-members:
+   :show-inheritance:
+
+.. automodule:: data.snapshot_service
    :members:
    :undoc-members:
    :private-members:
    :show-inheritance:
 
 .. automodule:: data.indicators
-   :members:
-   :undoc-members:
-   :private-members:
-   :show-inheritance:
-
-.. automodule:: data.mock_data
    :members:
    :undoc-members:
    :private-members:

@@ -50,7 +50,7 @@ def ranking_bar_chart(df: pd.DataFrame, top_n: int = 20) -> go.Figure:
         Plotly bar chart with municipalities grouped by maturity level.
     """
 
-    df_top = df.head(top_n).copy()
+    df_top = df.sort_values("score_total", ascending=False).head(top_n).copy()
     df_top["color"] = df_top["nivel"].map(COLORES_NIVEL)
     df_top["puntaje_pct"] = df_top["score_total"] * 100
 
@@ -78,11 +78,12 @@ def ranking_bar_chart(df: pd.DataFrame, top_n: int = 20) -> go.Figure:
     return _layout_base(fig, height=max(350, top_n * 22))
 
 
-def distribucion_niveles_pie(distribucion: dict) -> go.Figure:
+def distribucion_niveles_pie(distribucion: dict, height: int = 360) -> go.Figure:
     """Build a donut chart for maturity-level distribution.
 
     Args:
         distribucion: Mapping from maturity level to municipality count.
+        height: Figure height in pixels.
 
     Returns:
         Plotly pie chart with the configured maturity colors.
@@ -105,7 +106,51 @@ def distribucion_niveles_pie(distribucion: dict) -> go.Figure:
         x=0.5, y=0.5, font=dict(size=14, color=COLOR_PRIMARY),
         showarrow=False,
     )
-    return _layout_base(fig, height=320)
+    return _layout_base(fig, height=height)
+
+
+def madurez_servicios_horizontal(df: pd.DataFrame, height: int = 360) -> go.Figure:
+    """Build a horizontal bar chart for public service maturity.
+
+    Args:
+        df: Service summary rows with ``service_name``, ``maturity_index``,
+            and ``predominant_level`` columns.
+        height: Figure height in pixels.
+
+    Returns:
+        Plotly horizontal bar chart ordered by maturity.
+    """
+
+    plot_df = df.sort_values(["maturity_index", "service_name"], ascending=[True, True]).copy()
+    plot_df["color"] = plot_df["predominant_level"].map(COLORES_NIVEL)
+    fig = go.Figure(
+        go.Bar(
+            x=plot_df["maturity_index"],
+            y=plot_df["service_name"],
+            orientation="h",
+            marker_color=plot_df["color"],
+            text=plot_df["predominant_level"],
+            textposition="outside",
+            customdata=plot_df[["maturity_label"]].to_numpy(),
+            hovertemplate=(
+                "<b>%{y}</b><br>"
+                "Madurez ordinal: %{x:.2f}<br>"
+                "Referencia: %{customdata[0]}<extra></extra>"
+            ),
+        )
+    )
+    fig.update_layout(
+        xaxis=dict(
+            title="Madurez ordinal",
+            range=[0.8, 5.3],
+            tickmode="array",
+            tickvals=[1, 2, 3, 4, 5],
+            ticktext=ORDEN_NIVELES,
+        ),
+        yaxis=dict(title=""),
+        showlegend=False,
+    )
+    return _layout_base(fig, height=height)
 
 
 def radar_ejes(scores_eje: dict, nombre: str = "") -> go.Figure:
@@ -434,6 +479,449 @@ def cluster_chart(df: pd.DataFrame) -> go.Figure:
         legend=dict(title="Grupo"),
     )
     return _layout_base(fig, height=380)
+
+
+def mapa_niveles_publico(df: pd.DataFrame) -> go.Figure:
+    """Build a public municipality map colored by maturity level only.
+
+    Args:
+        df: Municipality data with coordinates and public-safe metadata.
+
+    Returns:
+        Plotly Mapbox scatter figure.
+    """
+
+    plot_df = df.dropna(subset=["lat", "lon"]).copy()
+    if plot_df.empty:
+        return _layout_base(go.Figure(), height=420)
+
+    plot_df["tamano"] = 10
+    fig = px.scatter_mapbox(
+        plot_df,
+        lat="lat",
+        lon="lon",
+        color="nivel",
+        color_discrete_map=COLORES_NIVEL,
+        size="tamano",
+        size_max=14,
+        hover_name="municipalidad",
+        hover_data={
+            "provincia": True,
+            "region": True,
+            "nivel": True,
+            "lat": False,
+            "lon": False,
+            "tamano": False,
+        },
+        category_orders={"nivel": ORDEN_NIVELES},
+        zoom=6.5,
+        center={"lat": 9.95, "lon": -84.2},
+        mapbox_style="carto-positron",
+    )
+    fig.update_layout(
+        legend=dict(title="Nivel", y=0.99, bgcolor="rgba(255,255,255,0.9)"),
+        margin=dict(t=10, b=10, l=10, r=10),
+    )
+    return _layout_base(fig, height=480)
+
+
+def historico_distribucion_niveles(history: list[dict]) -> go.Figure:
+    """Build a stacked area chart for public level distributions over time.
+
+    Args:
+        history: Historical public rows with ``label`` and ``level_distribution``.
+
+    Returns:
+        Plotly area figure.
+    """
+
+    rows = []
+    for item in history:
+        for level in ORDEN_NIVELES:
+            rows.append(
+                {
+                    "Período": item["label"],
+                    "Nivel": level,
+                    "Municipalidades": item["level_distribution"].get(level, 0),
+                }
+            )
+    df = pd.DataFrame(rows)
+    fig = px.area(
+        df,
+        x="Período",
+        y="Municipalidades",
+        color="Nivel",
+        color_discrete_map=COLORES_NIVEL,
+        category_orders={"Nivel": ORDEN_NIVELES},
+    )
+    fig.update_layout(
+        xaxis=dict(title="Período"),
+        yaxis=dict(title="Municipalidades"),
+        legend=dict(title="Nivel", orientation="h", y=-0.2),
+    )
+    return _layout_base(fig, height=340)
+
+
+def heatmap_niveles(
+    df: pd.DataFrame,
+    x_column: str,
+    y_column: str,
+    level_column: str,
+) -> go.Figure:
+    """Build a heatmap showing categorical maturity levels.
+
+    Args:
+        df: Rectangular categorical data.
+        x_column: Column to use as the horizontal axis.
+        y_column: Column to use as the vertical axis.
+        level_column: Column containing maturity level labels.
+
+    Returns:
+        Plotly heatmap with level text annotations.
+    """
+
+    level_to_number = {level: index + 1 for index, level in enumerate(ORDEN_NIVELES)}
+    x_values = list(dict.fromkeys(df[x_column].tolist()))
+    y_values = list(dict.fromkeys(df[y_column].tolist()))
+    z_matrix = []
+    text_matrix = []
+
+    for y_value in y_values:
+        z_row = []
+        text_row = []
+        for x_value in x_values:
+            match = df[(df[x_column] == x_value) & (df[y_column] == y_value)]
+            level = match.iloc[0][level_column] if not match.empty else ""
+            z_row.append(level_to_number.get(level, 0))
+            text_row.append(level or "—")
+        z_matrix.append(z_row)
+        text_matrix.append(text_row)
+
+    fig = go.Figure(
+        go.Heatmap(
+            z=z_matrix,
+            x=x_values,
+            y=y_values,
+            zmin=1,
+            zmax=5,
+            colorscale=[
+                [0.00, "#DC3545"],
+                [0.25, "#FD7E14"],
+                [0.50, "#2196F3"],
+                [0.75, "#20C997"],
+                [1.00, "#7B2FBE"],
+            ],
+            text=text_matrix,
+            texttemplate="%{text}",
+            hovertemplate="<b>%{y}</b><br>%{x}: %{text}<extra></extra>",
+            colorbar=dict(
+                title="Nivel",
+                tickvals=[1, 2, 3, 4, 5],
+                ticktext=ORDEN_NIVELES,
+            ),
+        )
+    )
+    fig.update_layout(xaxis=dict(title=""), yaxis=dict(title=""))
+    return _layout_base(fig, height=max(280, len(y_values) * 36 + 120))
+
+
+def progreso_servicios_bar(df: pd.DataFrame, value_column: str = "Progreso (%)") -> go.Figure:
+    """Build a horizontal bar chart for service progress percentages.
+
+    Args:
+        df: Service-level data with progress and level columns.
+        value_column: Name of the percentage column to plot.
+
+    Returns:
+        Plotly bar figure.
+    """
+
+    plot_df = df.sort_values(value_column, ascending=True).copy()
+    plot_df["color"] = plot_df["Nivel"].map(COLORES_NIVEL)
+    fig = go.Figure(
+        go.Bar(
+            x=plot_df[value_column],
+            y=plot_df["Servicio"],
+            orientation="h",
+            marker_color=plot_df["color"],
+            text=[f"{value:.0f}%" for value in plot_df[value_column]],
+            textposition="outside",
+            hovertemplate="<b>%{y}</b><br>Progreso: %{x:.1f}%<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        xaxis=dict(title="Progreso (%)", range=[0, 105]),
+        yaxis=dict(title=""),
+        showlegend=False,
+    )
+    return _layout_base(fig, height=max(320, len(plot_df) * 28))
+
+
+def heatmap_etapas_servicio(df: pd.DataFrame) -> go.Figure:
+    """Build a heatmap for stage completion by service.
+
+    Args:
+        df: Rows with ``Servicio``, ``Etapa`` and ``Progreso (%)`` columns.
+
+    Returns:
+        Plotly heatmap figure.
+    """
+
+    servicios = list(dict.fromkeys(df["Servicio"].tolist()))
+    etapas = ["Planificación", "Ejecución", "Evaluación"]
+    matrix = []
+    for servicio in servicios:
+        row = []
+        for etapa in etapas:
+            match = df[(df["Servicio"] == servicio) & (df["Etapa"] == etapa)]
+            row.append(float(match.iloc[0]["Progreso (%)"]) if not match.empty else 0.0)
+        matrix.append(row)
+
+    fig = go.Figure(
+        go.Heatmap(
+            z=matrix,
+            x=etapas,
+            y=servicios,
+            zmin=0,
+            zmax=100,
+            colorscale="Blues",
+            text=[[f"{value:.0f}%" for value in row] for row in matrix],
+            texttemplate="%{text}",
+            hovertemplate="<b>%{y}</b><br>%{x}: %{z:.1f}%<extra></extra>",
+            colorbar=dict(title="Progreso %"),
+        )
+    )
+    fig.update_layout(xaxis=dict(title=""), yaxis=dict(title=""))
+    return _layout_base(fig, height=max(320, len(servicios) * 30))
+
+
+def dispersion_prioridades(df: pd.DataFrame) -> go.Figure:
+    """Build a priority scatter chart using progress, age, and percentile.
+
+    Args:
+        df: Service rows with progress, age, percentile, and status columns.
+
+    Returns:
+        Plotly scatter figure.
+    """
+
+    plot_df = df.copy()
+    plot_df["Antigüedad (meses)"] = plot_df["Antigüedad (meses)"].fillna(0)
+    plot_df["Percentil"] = plot_df["Percentil"].fillna(0)
+    fig = px.scatter(
+        plot_df,
+        x="Progreso (%)",
+        y="Antigüedad (meses)",
+        size="Percentil",
+        color="Estado operativo",
+        hover_name="Servicio",
+        hover_data={"Nivel": True, "Percentil": ":.1f"},
+        size_max=26,
+    )
+    fig.update_layout(
+        xaxis=dict(title="Progreso (%)", range=[0, 100]),
+        yaxis=dict(title="Antigüedad (meses)"),
+        legend=dict(title="Estado operativo"),
+    )
+    return _layout_base(fig, height=380)
+
+
+def historico_niveles_linea(df: pd.DataFrame) -> go.Figure:
+    """Build a line chart for historical maturity levels.
+
+    Args:
+        df: History rows with ``Período`` and ``Nivel`` columns.
+
+    Returns:
+        Plotly line chart using ordinal level positions.
+    """
+
+    level_to_number = {level: index + 1 for index, level in enumerate(ORDEN_NIVELES)}
+    plot_df = df.copy()
+    plot_df["Nivel num"] = plot_df["Nivel"].map(level_to_number)
+    fig = go.Figure(
+        go.Scatter(
+            x=plot_df["Período"],
+            y=plot_df["Nivel num"],
+            mode="lines+markers",
+            line=dict(color=COLOR_PRIMARY, width=3),
+            marker=dict(size=9, color=COLOR_ACCENT),
+            hovertemplate="<b>%{x}</b><br>Nivel: %{text}<extra></extra>",
+            text=plot_df["Nivel"],
+        )
+    )
+    fig.update_layout(
+        xaxis=dict(title="Período"),
+        yaxis=dict(
+            title="Nivel",
+            tickmode="array",
+            tickvals=[1, 2, 3, 4, 5],
+            ticktext=ORDEN_NIVELES,
+            range=[0.8, 5.2],
+        ),
+        showlegend=False,
+    )
+    return _layout_base(fig, height=300)
+
+
+def evolucion_puntaje_region(df: pd.DataFrame) -> go.Figure:
+    """Build a multi-line chart for average regional score history.
+
+    Args:
+        df: Rows with ``Período``, ``Región`` and ``Puntaje (%)`` columns.
+
+    Returns:
+        Plotly line chart for regional score evolution.
+    """
+
+    plot_df = df.copy()
+    plot_df["Período"] = plot_df["Período"].astype(str)
+    fig = px.line(
+        plot_df,
+        x="Período",
+        y="Puntaje (%)",
+        color="Región",
+        markers=True,
+    )
+    fig.update_traces(mode="lines+markers")
+    fig.update_layout(
+        xaxis=dict(title="Período", type="category"),
+        yaxis=dict(title="Puntaje promedio (%)", range=[0, 100]),
+        legend=dict(title="Región", orientation="h", y=-0.25),
+    )
+    return _layout_base(fig, height=360)
+
+
+def benchmark_percentiles_bar(df: pd.DataFrame) -> go.Figure:
+    """Build a service benchmark bar chart using percentiles.
+
+    Args:
+        df: Service rows with percentile and level columns.
+
+    Returns:
+        Plotly bar figure.
+    """
+
+    plot_df = df.sort_values("Percentil", ascending=True).copy()
+    plot_df["color"] = plot_df["Nivel"].map(COLORES_NIVEL)
+    fig = go.Figure(
+        go.Bar(
+            x=plot_df["Percentil"],
+            y=plot_df["Servicio"],
+            orientation="h",
+            marker_color=plot_df["color"],
+            text=[f"{value:.0f}" for value in plot_df["Percentil"]],
+            textposition="outside",
+            hovertemplate="<b>%{y}</b><br>Percentil: %{x:.1f}<extra></extra>",
+        )
+    )
+    fig.update_layout(
+        xaxis=dict(title="Percentil (más alto es mejor)", range=[0, 105]),
+        yaxis=dict(title=""),
+        showlegend=False,
+    )
+    return _layout_base(fig, height=max(320, len(plot_df) * 28))
+
+
+def comparador_servicios_nivel(df: pd.DataFrame) -> go.Figure:
+    """Build a grouped bar chart for compared municipalities by service level.
+
+    Args:
+        df: Rows with ``Municipalidad``, ``Servicio`` and ``Nivel`` columns.
+
+    Returns:
+        Plotly grouped bar figure with maturity on the vertical axis.
+    """
+
+    level_to_number = {level: index + 1 for index, level in enumerate(ORDEN_NIVELES)}
+    plot_df = df.copy()
+    plot_df["Nivel num"] = plot_df["Nivel"].map(level_to_number)
+    service_order = list(dict.fromkeys(plot_df["Servicio"].tolist()))
+
+    fig = px.bar(
+        plot_df,
+        x="Servicio",
+        y="Nivel num",
+        color="Municipalidad",
+        barmode="group",
+        hover_data={"Nivel": True, "Nivel num": False},
+        category_orders={"Servicio": service_order},
+    )
+    fig.update_layout(
+        xaxis=dict(title="Servicios"),
+        yaxis=dict(
+            title="Grado de madurez",
+            tickmode="array",
+            tickvals=[1, 2, 3, 4, 5],
+            ticktext=ORDEN_NIVELES,
+            range=[0.5, 5.5],
+        ),
+        legend=dict(title="Municipalidad", orientation="h", y=-0.25),
+        bargap=0.22,
+        bargroupgap=0.08,
+    )
+    fig.update_traces(
+        hovertemplate="<b>%{x}</b><br>Municipalidad: %{fullData.name}<br>Nivel: %{customdata[0]}<extra></extra>"
+    )
+    return _layout_base(fig, height=max(380, len(plot_df["Servicio"].unique()) * 24))
+
+
+def comparador_madurez_servicios_heatmap(df: pd.DataFrame) -> go.Figure:
+    """Build a service-versus-municipality maturity heatmap.
+
+    Args:
+        df: Rows with ``Municipalidad``, ``Servicio`` and ``Nivel`` columns.
+
+    Returns:
+        Plotly heatmap for fast multi-municipal comparison.
+    """
+
+    level_to_number = {level: index + 1 for index, level in enumerate(ORDEN_NIVELES)}
+    services = sorted(df["Servicio"].unique().tolist())
+    municipalities = list(dict.fromkeys(df["Municipalidad"].tolist()))
+    matrix = []
+    text_matrix = []
+
+    for service in services:
+        z_row = []
+        t_row = []
+        for municipality in municipalities:
+            match = df[(df["Servicio"] == service) & (df["Municipalidad"] == municipality)]
+            level = match.iloc[0]["Nivel"] if not match.empty else ""
+            z_row.append(level_to_number.get(level, 0))
+            t_row.append(level or "—")
+        matrix.append(z_row)
+        text_matrix.append(t_row)
+
+    fig = go.Figure(
+        go.Heatmap(
+            z=matrix,
+            x=municipalities,
+            y=services,
+            zmin=1,
+            zmax=5,
+            colorscale=[
+                [0.00, "#DC3545"],
+                [0.25, "#FD7E14"],
+                [0.50, "#2196F3"],
+                [0.75, "#20C997"],
+                [1.00, "#7B2FBE"],
+            ],
+            text=text_matrix,
+            texttemplate="%{text}",
+            hovertemplate="<b>%{y}</b><br>%{x}: %{text}<extra></extra>",
+            colorbar=dict(
+                title="Nivel",
+                tickvals=[1, 2, 3, 4, 5],
+                ticktext=ORDEN_NIVELES,
+            ),
+        )
+    )
+    fig.update_layout(
+        xaxis=dict(title="Municipalidad"),
+        yaxis=dict(title="Servicio"),
+    )
+    return _layout_base(fig, height=max(360, len(services) * 32))
 
 
 def _nivel_por_score(score: float) -> str:

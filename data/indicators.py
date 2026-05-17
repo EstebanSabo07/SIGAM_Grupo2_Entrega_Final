@@ -455,3 +455,31 @@ def contar_indicadores_totales() -> dict:
                 elif etapa == "Ejecución":    ejec  += count
                 elif etapa == "Evaluación":   evalu += count
     return {"total": total, "planificacion": plan, "ejecucion": ejec, "evaluacion": evalu}
+
+
+def build_indicator_metadata_map() -> dict[str, dict]:
+    """Build a lookup of indicator metadata keyed by indicator code.
+
+    Returns:
+        Mapping from indicator code to UI and persistence metadata extracted
+        from the static transition catalog.
+    """
+
+    metadata: dict[str, dict] = {}
+    for eje_nombre, eje_data in ESTRUCTURA_IGSM.items():
+        for servicio_nombre, servicio_data in eje_data["servicios"].items():
+            for etapa_nombre, indicadores in servicio_data["etapas"].items():
+                for indicador in indicadores:
+                    metadata[indicador["codigo"]] = {
+                        "codigo": indicador["codigo"],
+                        "nombre": indicador["nombre"],
+                        "tipo": indicador["tipo"],
+                        "evidencia": indicador.get("evidencia", False),
+                        "doc": indicador.get("doc"),
+                        "etapa": etapa_nombre,
+                        "servicio": servicio_nombre,
+                        "eje": eje_nombre,
+                        "agrupacion": servicio_data.get("agrupacion"),
+                        "diversificado_key": servicio_data.get("diversificado_key"),
+                    }
+    return metadata

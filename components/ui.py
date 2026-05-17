@@ -2,8 +2,12 @@
 
 # components/ui.py — Componentes reutilizables de UI para SIGAM
 
-import streamlit as st
 from pathlib import Path
+
+import streamlit as st
+
+from data.snapshot import SnapshotContext, current_snapshot
+from data.snapshot_service import resolve_snapshot_period
 
 def load_css():
     """Load the project stylesheet into the current Streamlit page.
@@ -133,6 +137,23 @@ def alert_box(mensaje: str, tipo: str = "info", icono: str = ""):
     clase = tipos.get(tipo, "alert-info")
     st.markdown(f'<div class="{clase}">{icono} {mensaje}</div>', unsafe_allow_html=True)
 
+
+def snapshot_context_note(selected_label: str, latest_label: str) -> None:
+    """Render a subtle note describing the selected and latest real periods.
+
+    Args:
+        selected_label: User-selected snapshot label.
+        latest_label: Latest real loaded period label.
+    """
+
+    st.markdown(
+        (
+            f'<div class="snapshot-context"><strong>Mostrando datos del corte seleccionado:</strong> '
+            f"{selected_label} · <strong>Última carga real disponible:</strong> {latest_label}</div>"
+        ),
+        unsafe_allow_html=True,
+    )
+
 def sidebar_logo():
     """Render the CGR logo in the Streamlit sidebar."""
 
@@ -151,7 +172,7 @@ def sidebar_muni(nombre_muni: str):
     paginas = [
         ("🏠", "Inicio",          "muni_home"),
         ("📋", "Formulario IGSM", "muni_form"),
-        ("📊", "Mis Resultados",  "muni_results"),
+        ("📊", "Resultados",      "muni_results"),
     ]
     pagina_actual = st.session_state.get("page", "muni_home")
 
@@ -164,13 +185,14 @@ def sidebar_muni(nombre_muni: str):
         with col:
             tipo = "primary" if pagina_actual == pagina else "secondary"
             if st.button(f"{icono} {nombre}", key=f"nav_{pagina}",
-                         use_container_width=True, type=tipo):
+                         width="stretch", type=tipo):
                 st.session_state["page"] = pagina
                 st.rerun()
     with c_out:
-        if st.button("🚪", key="logout", use_container_width=True, help="Cerrar sesión"):
+        if st.button("🚪", key="logout", width="stretch", help="Cerrar sesión"):
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
+            st.query_params.clear()
             st.rerun()
     st.markdown('<hr style="margin:0.3rem 0 1rem 0;border-color:#E8EDF4;">', unsafe_allow_html=True)
 
@@ -196,13 +218,14 @@ def sidebar_admin():
         with col:
             tipo = "primary" if pagina_actual == pagina else "secondary"
             if st.button(f"{icono} {nombre}", key=f"nav_{pagina}",
-                         use_container_width=True, type=tipo):
+                         width="stretch", type=tipo):
                 st.session_state["page"] = pagina
                 st.rerun()
     with c_out:
-        if st.button("🚪", key="logout_admin", use_container_width=True, help="Cerrar sesión"):
+        if st.button("🚪", key="logout_admin", width="stretch", help="Cerrar sesión"):
             for k in list(st.session_state.keys()):
                 del st.session_state[k]
+            st.query_params.clear()
             st.rerun()
     st.markdown('<hr style="margin:0.3rem 0 1rem 0;border-color:#E8EDF4;">', unsafe_allow_html=True)
 
@@ -252,4 +275,93 @@ def gauge_score(score: float, titulo: str = "IGSM"):
         paper_bgcolor="white",
         font_color="#1A2636",
     )
-    st.plotly_chart(fig, use_container_width=True)
+    st.plotly_chart(fig, width="stretch")
+
+
+def month_year_selector(audience: str, municipality_code: str | None = None, key_prefix: str = "snapshot") -> SnapshotContext:
+    """Render and persist a month-year selector in Streamlit.
+
+    Args:
+        audience: Consumer audience.
+        municipality_code: Optional municipal scope.
+        key_prefix: Session-state key prefix.
+
+    Returns:
+        Selected snapshot context.
+    """
+
+    current = current_snapshot(audience, municipality_code=municipality_code)
+    default_year = st.session_state.get("snapshot_year", current.year)
+    default_month = st.session_state.get("snapshot_month", current.month)
+    resolved = resolve_snapshot_period(
+        requested_year=int(default_year),
+        requested_month=int(default_month),
+    )
+    selected_period = resolved["selected_period"]
+    available_years = resolved["available_years"]
+
+    if not resolved["has_data"]:
+        st.info("No hay períodos cargados en la base de datos. Se usa el mes actual como referencia.")
+
+    col_year, col_month = st.columns([1, 1])
+    with col_year:
+        selected_year = st.selectbox(
+            "Año",
+            available_years,
+            index=available_years.index(selected_period["year"]),
+            key=f"{key_prefix}_year",
+            disabled=not resolved["has_data"],
+        )
+
+    month_names = {
+        1: "Enero",
+        2: "Febrero",
+        3: "Marzo",
+        4: "Abril",
+        5: "Mayo",
+        6: "Junio",
+        7: "Julio",
+        8: "Agosto",
+        9: "Septiembre",
+        10: "Octubre",
+        11: "Noviembre",
+        12: "Diciembre",
+    }
+    months = [
+        {"month": item["month"], "label": month_names[item["month"]]}
+        for item in resolved["available_periods"]
+        if item["year"] == selected_year
+    ]
+    requested_month_int = int(default_month)
+    selected_month_default = (
+        requested_month_int
+        if any(item["month"] == requested_month_int for item in months)
+        else months[-1]["month"]
+    )
+
+    with col_month:
+        selected_month = st.selectbox(
+            "Mes",
+            months,
+            index=next(
+                (index for index, item in enumerate(months) if item["month"] == selected_month_default),
+                0,
+            ),
+            format_func=lambda item: item["label"],
+            key=f"{key_prefix}_month",
+            disabled=not resolved["has_data"],
+        )["month"]
+
+    st.session_state["snapshot_year"] = selected_year
+    st.session_state["snapshot_month"] = selected_month
+    if resolved["latest_real_period"] is not None:
+        snapshot_context_note(
+            f"{selected_year:04d}-{selected_month:02d}",
+            resolved["latest_real_period"]["label"],
+        )
+    return SnapshotContext(
+        year=selected_year,
+        month=selected_month,
+        audience=audience,
+        municipality_code=municipality_code,
+    )
