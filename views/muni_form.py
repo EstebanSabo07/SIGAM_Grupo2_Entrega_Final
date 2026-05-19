@@ -60,6 +60,7 @@ def _render_unsaved_changes_dialog(
                     st.error(error)
             else:
                 st.session_state["form_current_service"] = st.session_state["form_pending_service"]
+                st.session_state["form_selected_service"] = st.session_state["form_pending_service"]
                 st.session_state["form_pending_service"] = None
                 st.session_state["form_last_message"] = f"Se guardaron {saved_rows} cambio(s) en el servicio."
                 st.rerun()
@@ -68,6 +69,7 @@ def _render_unsaved_changes_dialog(
             for stage in current_service["stages"]:
                 _load_section_state(municipality_code, stage["section_id"], snapshot)
             st.session_state["form_current_service"] = st.session_state["form_pending_service"]
+            st.session_state["form_selected_service"] = st.session_state["form_pending_service"]
             st.session_state["form_pending_service"] = None
             st.rerun()
     with c3:
@@ -104,6 +106,8 @@ def show() -> None:
     st.session_state["form_service_map"] = services_by_code
     if st.session_state.get("form_current_service") not in services_by_code:
         st.session_state["form_current_service"] = services[0]["service_code"]
+    if st.session_state.get("form_selected_service") not in services_by_code:
+        st.session_state["form_selected_service"] = st.session_state["form_current_service"]
 
     current_service = services_by_code[st.session_state["form_current_service"]]
     pending_service = st.session_state.get("form_pending_service")
@@ -111,6 +115,7 @@ def show() -> None:
         _render_unsaved_changes_dialog(municipality_code, current_service, snapshot)
     elif pending_service and not _service_has_dirty(current_service):
         st.session_state["form_current_service"] = pending_service
+        st.session_state["form_selected_service"] = pending_service
         st.session_state["form_pending_service"] = None
         st.rerun()
 
@@ -329,23 +334,38 @@ def _section_has_unsaved_changes(section_id: str) -> bool:
     return bool(st.session_state.get(_section_touched_key(section_id), False)) and _is_dirty(section_id)
 
 
-def _request_service_navigation(service_code: str) -> None:
-    """Request navigation to another service, respecting unsaved changes.
+def _format_service_option(service_code: str) -> str:
+    """Return the display label for one service selector option.
 
     Args:
-        service_code: Target service code.
+        service_code: Service code stored in session state.
+
+    Returns:
+        User-facing service label.
     """
 
-    if service_code == st.session_state.get("form_current_service"):
+    service = st.session_state.get("form_service_map", {}).get(service_code)
+    if not service:
+        return service_code
+    return f"{service['service_name']} ({service['indicator_count']})"
+
+
+def _handle_service_selection_change() -> None:
+    """Synchronize the selected and active services after one UI click."""
+
+    selected_service = st.session_state.get("form_selected_service")
+    current_service_code = st.session_state.get("form_current_service")
+    if not selected_service or selected_service == current_service_code:
         return
-    current_service = st.session_state.get("form_service_map", {}).get(
-        st.session_state.get("form_current_service")
-    )
+
+    current_service = st.session_state.get("form_service_map", {}).get(current_service_code)
     if _can_navigate_without_prompt(current_service):
-        st.session_state["form_current_service"] = service_code
+        st.session_state["form_current_service"] = selected_service
         st.session_state["form_pending_service"] = None
-        st.rerun()
-    st.session_state["form_pending_service"] = service_code
+        return
+
+    st.session_state["form_pending_service"] = selected_service
+    st.session_state["form_selected_service"] = current_service_code
 
 
 def _render_service_list(services: list[dict[str, Any]], current_service_code: str) -> None:
@@ -357,16 +377,17 @@ def _render_service_list(services: list[dict[str, Any]], current_service_code: s
     """
 
     st.markdown("##### Servicios")
-    for service in services:
-        label = f"{service['service_name']} ({service['indicator_count']})"
-        button_type = "primary" if service["service_code"] == current_service_code else "secondary"
-        if st.button(
-            label,
-            key=f"service_button::{service['service_code']}",
-            width="stretch",
-            type=button_type,
-        ):
-            _request_service_navigation(service["service_code"])
+    service_codes = [service["service_code"] for service in services]
+    if st.session_state.get("form_selected_service") not in service_codes:
+        st.session_state["form_selected_service"] = current_service_code
+    st.radio(
+        "Servicios",
+        service_codes,
+        key="form_selected_service",
+        format_func=_format_service_option,
+        on_change=_handle_service_selection_change,
+        label_visibility="collapsed",
+    )
 
 
 def _render_service_editor(

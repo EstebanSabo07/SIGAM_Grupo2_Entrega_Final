@@ -363,4 +363,4 @@ def show() -> None:
                 "El PDF formal no está disponible en el entorno actual de Streamlit. "
                 f"Instálelo con: `{pdf_status['recommended_install_command']}`. "
                 f"Runtime activo: `{pdf_status['runtime_executable']}`."
-   
+            )

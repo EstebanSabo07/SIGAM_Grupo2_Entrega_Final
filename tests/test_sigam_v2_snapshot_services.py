@@ -15,7 +15,7 @@ from data.presentation_service import (
     get_municipality_snapshot_view,
     get_national_snapshot_view,
 )
-from data.reporting_service import export_csv, export_pdf
+from data.reporting_service import export_csv, export_pdf, pdf_export_status
 from data.response_service import save_section_changes
 from data.scoring_service import get_municipality_snapshot
 from data.snapshot import AUDIENCE_ADMIN, AUDIENCE_MUNICIPAL, AUDIENCE_PUBLIC, SnapshotContext
@@ -403,7 +403,7 @@ class SigamV2SnapshotServiceTests(unittest.TestCase):
     def test_public_and_municipal_pdf_require_formal_backend(self) -> None:
         """Validate public and municipal PDF exports refuse degraded fallback generation."""
 
-        with patch("data.reporting_service.pdf_export_available", return_value=False):
+        with patch("data.reporting_service._reportlab_import_error", return_value="No module named 'reportlab'"):
             with self.assertRaisesRegex(RuntimeError, "backend de PDF formal"):
                 export_pdf(SnapshotContext(2026, 4, AUDIENCE_PUBLIC), AUDIENCE_PUBLIC)
             with self.assertRaisesRegex(RuntimeError, "backend de PDF formal"):
@@ -412,6 +412,23 @@ class SigamV2SnapshotServiceTests(unittest.TestCase):
                     AUDIENCE_MUNICIPAL,
                     {"municipality_code": "MUNI-TEST"},
                 )
+
+    def test_pdf_export_status_reports_runtime_and_install_command(self) -> None:
+        """Validate PDF diagnostics expose the active runtime and install command."""
+
+        with patch("data.reporting_service._reportlab_import_error", return_value="No module named 'reportlab'"):
+            with patch(
+                "data.reporting_service.shutil.which",
+                return_value=(
+                    "C:\\Users\\Jason\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0"
+                    "\\LocalCache\\local-packages\\Python313\\Scripts\\streamlit.exe"
+                ),
+            ):
+                status = pdf_export_status()
+
+        self.assertFalse(status["available"])
+        self.assertTrue(status["runtime_executable"])
+        self.assertIn("pip.exe", status["recommended_install_command"])
 
     def test_municipal_results_helpers_normalize_labels_and_chart_frame(self) -> None:
         """Validate municipal results helpers keep labels and chart rows consistent."""

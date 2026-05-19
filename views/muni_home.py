@@ -8,7 +8,7 @@ import streamlit as st
 
 from components.ui import kpi_card, month_year_selector, page_header
 from data.presentation_service import get_municipality_snapshot_view
-from data.reporting_service import active_runtime_executable, export_csv, export_pdf, pdf_export_available
+from data.reporting_service import export_csv, export_pdf, pdf_export_status
 from data.snapshot import AUDIENCE_MUNICIPAL
 
 
@@ -95,7 +95,6 @@ def _render_service_grid(services: list[dict]) -> None:
         age_label = service["data_age_months"] if service["data_age_months"] is not None else "—"
         update_date = service["update_date"] or "Sin registros"
         with columns[index % 3]:
-            st.markdown('<div class="service-grid-hitbox">', unsafe_allow_html=True)
             st.markdown(
                 f"""
                 <div class="service-grid-card">
@@ -115,14 +114,6 @@ def _render_service_grid(services: list[dict]) -> None:
                 """,
                 unsafe_allow_html=True,
             )
-            if st.button(
-                " ",
-                key=f"service_grid::{service['service_code']}",
-                width="stretch",
-                help=f"Abrir {service['service_name']}",
-            ):
-                _open_service_form(service["service_code"])
-            st.markdown("</div>", unsafe_allow_html=True)
 
 
 def show() -> None:
@@ -175,7 +166,8 @@ def show() -> None:
             width="stretch",
         )
     with d2:
-        if pdf_export_available():
+        pdf_status = pdf_export_status()
+        if pdf_status["available"]:
             try:
                 pdf_bytes = export_pdf(snapshot, AUDIENCE_MUNICIPAL, {"municipality_code": municipality_code})
             except RuntimeError as exc:
@@ -191,6 +183,6 @@ def show() -> None:
         else:
             st.warning(
                 "El PDF formal no está disponible en el entorno actual de Streamlit. "
-                f"Instale `reportlab` en ese intérprete para habilitar esta descarga. "
-                f"Runtime activo: `{active_runtime_executable()}`."
+                f"Instálelo con: `{pdf_status['recommended_install_command']}`. "
+                f"Runtime activo: `{pdf_status['runtime_executable']}`."
             )

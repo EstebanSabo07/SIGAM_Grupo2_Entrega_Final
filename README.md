@@ -63,6 +63,12 @@ where streamlit
 python -c "import sys, reportlab; print(sys.executable); print(reportlab.__version__)"
 ```
 
+En esta máquina, el launcher detectado de Streamlit apunta al runtime de Microsoft Store. Si mantiene ese launcher, instale el backend PDF formal allí:
+
+```bash
+"C:\Users\Jason\AppData\Local\Packages\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0\LocalCache\local-packages\Python313\Scripts\pip.exe" install reportlab
+```
+
 ### Accesos de demo
 
 | Rol | Acceso |

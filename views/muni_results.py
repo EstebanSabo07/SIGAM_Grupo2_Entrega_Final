@@ -13,7 +13,7 @@ from components.charts import (
     historico_niveles_linea,
     madurez_servicios_horizontal,
 )
-from components.ui import kpi_card, month_year_selector, page_header
+from components.ui import kpi_card, month_year_selector, nivel_badge, page_header
 from data.presentation_service import get_municipality_snapshot_view
 from data.snapshot import AUDIENCE_MUNICIPAL
 
@@ -82,12 +82,19 @@ def _build_service_maturity_frame(services: list[dict]) -> pd.DataFrame:
 def _render_priority_legend() -> None:
     """Render the compact legend for the municipal priority grid."""
 
-    items = []
-    for label, description in LABEL_DESCRIPTIONS:
+    items = [
+        """
+        <span class="service-legend-item">
+            <span class="service-pill service-pill-urgent">Necesitan actualización</span>
+            Datos viejos o incompletos que deben atenderse primero.
+        </span>
+        """
+    ]
+    for label, description in LABEL_DESCRIPTIONS[1:]:
         items.append(
             f"""
             <span class="service-legend-item">
-                <strong>{escape(label)}</strong>
+                {nivel_badge(label)}
                 {escape(description)}
             </span>
             """
