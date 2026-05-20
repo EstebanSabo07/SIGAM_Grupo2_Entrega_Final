@@ -10,18 +10,17 @@ from data.presentation_service import get_national_snapshot_view
 from data.snapshot import AUDIENCE_ADMIN
 
 
-def show() -> None:
-    """Render the advanced analytics page."""
+def _build_analysis_frames(national: dict) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Build the dataframes used by the advanced analysis tabs.
 
-    page_header(
-        "Análisis avanzado",
-        "Panel de auditoría para identificar qué tan antiguos son los datos por municipalidad y por servicio.",
-        "🔬",
-    )
-    snapshot = month_year_selector(AUDIENCE_ADMIN, key_prefix="admin_analysis_snapshot")
-    national = get_national_snapshot_view(snapshot, AUDIENCE_ADMIN)
+    Args:
+        national: National admin snapshot view.
+
+    Returns:
+        Municipality and service analysis dataframes.
+    """
+
     municipalities = national["municipalities"]
-
     municipality_rows = []
     service_rows = []
     for municipality in municipalities:
@@ -36,7 +35,7 @@ def show() -> None:
                 "Región": municipality["municipality"].get("region"),
                 "Provincia": municipality["municipality"].get("provincia"),
                 "Promedio antigüedad (meses)": round(sum(age_values) / len(age_values), 2) if age_values else None,
-                "Servicios con dato": len(age_values),
+                "Servicios con datos": len(age_values),
                 "Puntaje (%)": municipality["puntaje_pct"],
                 "Nivel": municipality["level"],
             }
@@ -63,7 +62,17 @@ def show() -> None:
         na_position="last",
     )
     service_df = pd.DataFrame(service_rows)
+    return municipality_df, service_df
 
+
+def _render_data_freshness_tab(national: dict) -> None:
+    """Render the current freshness and service detail analysis tab.
+
+    Args:
+        national: National admin snapshot view.
+    """
+
+    municipality_df, service_df = _build_analysis_frames(national)
     st.markdown("##### Promedio de antigüedad por municipalidad")
     st.dataframe(municipality_df, width="stretch", hide_index=True)
 
@@ -90,3 +99,55 @@ def show() -> None:
             | detail_df["Eje"].str.contains(service_filter, case=False, na=False)
         ]
     st.dataframe(detail_df, width="stretch", hide_index=True)
+
+
+def _render_ml_models_tab() -> None:
+    """Render the placeholder tab for predictive and ML-focused modules."""
+
+    st.markdown("##### Modelos predictivos y de clasificación")
+    st.info(
+        "Próximamente este espacio reunirá modelos de predicción, clasificación y detección de patrones para fortalecer el análisis del índice."
+    )
+    c1, c2, c3 = st.columns(3)
+    cards = [
+        (
+            "Proyección del índice",
+            "Estimar cómo podría evolucionar el nivel de madurez por municipalidad y por servicio en próximos cortes.",
+        ),
+        (
+            "Clasificación de riesgo",
+            "Priorizar municipalidades o servicios con mayor probabilidad de rezago, observación o deterioro operativo.",
+        ),
+        (
+            "Patrones y anomalías",
+            "Detectar comportamientos atípicos y señales territoriales útiles para auditoría y seguimiento estratégico.",
+        ),
+    ]
+    for column, (title, description) in zip([c1, c2, c3], cards):
+        with column:
+            st.markdown(
+                (
+                    '<div class="mini-info-card">'
+                    f'<div class="mini-info-title">{title}</div>'
+                    f'<div class="mini-info-meta">{description}</div>'
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
+
+
+def show() -> None:
+    """Render the advanced analytics page."""
+
+    page_header(
+        "Análisis avanzado",
+        "Panel de auditoría con análisis de vigencia y un espacio dedicado a futuros modelos predictivos sobre el índice.",
+        "🔬",
+    )
+    snapshot = month_year_selector(AUDIENCE_ADMIN, key_prefix="admin_analysis_snapshot")
+    national = get_national_snapshot_view(snapshot, AUDIENCE_ADMIN)
+    tabs = st.tabs(["Vigencia y calidad de datos", "Modelos predictivos y ML"])
+    with tabs[0]:
+        _render_data_freshness_tab(national)
+    with tabs[1]:
+        _render_ml_models_tab()

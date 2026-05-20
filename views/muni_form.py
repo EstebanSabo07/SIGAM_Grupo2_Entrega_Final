@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from copy import deepcopy
+from collections import OrderedDict
+from html import escape
 from typing import Any
 
 import streamlit as st
@@ -123,11 +125,25 @@ def show() -> None:
         st.success(st.session_state["form_last_message"])
         st.session_state["form_last_message"] = None
 
-    nav_col, content_col = st.columns([1, 2.4])
+    nav_col, content_col = st.columns([1.02, 2.15], gap="large")
     with nav_col:
-        _render_service_list(services, current_service["service_code"])
+        _render_service_picker(services, current_service["service_code"])
     with content_col:
-        _render_service_editor(municipality_code, municipality_name, current_service, snapshot)
+        left_pad, editor_col, right_pad = st.columns([0.05, 0.9, 0.05])
+        _ = (left_pad, right_pad)
+        with editor_col:
+            st.markdown('<div class="service-editor-panel">', unsafe_allow_html=True)
+            st.markdown(
+                (
+                    '<div class="form-action-note">'
+                    "<strong>Cómo usarlo:</strong> elija un servicio en la lista lateral y luego actualice sus etapas."
+                    "</div>"
+                ),
+                unsafe_allow_html=True,
+            )
+            st.markdown('<div class="section-gap-sm"></div>', unsafe_allow_html=True)
+            _render_service_editor(municipality_code, municipality_name, current_service, snapshot)
+            st.markdown("</div>", unsafe_allow_html=True)
 
 
 def _build_service_sections(form_tree: dict[str, Any]) -> list[dict[str, Any]]:
@@ -165,6 +181,24 @@ def _build_service_sections(form_tree: dict[str, Any]) -> list[dict[str, Any]]:
                 }
             )
     return services
+
+
+def _group_services_by_axis(
+    services: list[dict[str, Any]],
+) -> list[tuple[str, list[dict[str, Any]]]]:
+    """Group service descriptors by axis while preserving display order.
+
+    Args:
+        services: Flat service descriptor list.
+
+    Returns:
+        Ordered ``(axis_name, services)`` groups for menu rendering.
+    """
+
+    grouped: OrderedDict[str, list[dict[str, Any]]] = OrderedDict()
+    for service in services:
+        grouped.setdefault(service["axis_name"], []).append(service)
+    return list(grouped.items())
 
 
 def _section_state_key(section_id: str, suffix: str) -> str:
@@ -334,60 +368,60 @@ def _section_has_unsaved_changes(section_id: str) -> bool:
     return bool(st.session_state.get(_section_touched_key(section_id), False)) and _is_dirty(section_id)
 
 
-def _format_service_option(service_code: str) -> str:
-    """Return the display label for one service selector option.
+def _request_service_change(selected_service: str | None) -> None:
+    """Synchronize the selected and active services after one UI click.
 
     Args:
-        service_code: Service code stored in session state.
-
-    Returns:
-        User-facing service label.
+        selected_service: Requested service code.
     """
 
-    service = st.session_state.get("form_service_map", {}).get(service_code)
-    if not service:
-        return service_code
-    return f"{service['service_name']} ({service['indicator_count']})"
-
-
-def _handle_service_selection_change() -> None:
-    """Synchronize the selected and active services after one UI click."""
-
-    selected_service = st.session_state.get("form_selected_service")
     current_service_code = st.session_state.get("form_current_service")
     if not selected_service or selected_service == current_service_code:
+        st.session_state["form_selected_service"] = current_service_code
         return
 
     current_service = st.session_state.get("form_service_map", {}).get(current_service_code)
     if _can_navigate_without_prompt(current_service):
         st.session_state["form_current_service"] = selected_service
+        st.session_state["form_selected_service"] = selected_service
         st.session_state["form_pending_service"] = None
-        return
+        st.rerun()
 
     st.session_state["form_pending_service"] = selected_service
     st.session_state["form_selected_service"] = current_service_code
+    st.rerun()
 
 
-def _render_service_list(services: list[dict[str, Any]], current_service_code: str) -> None:
-    """Render the selectable list of services.
+def _render_service_picker(services: list[dict[str, Any]], current_service_code: str) -> None:
+    """Render the lateral service navigation for the municipal form.
 
     Args:
         services: Service descriptors.
         current_service_code: Active service code.
     """
 
-    st.markdown("##### Servicios")
     service_codes = [service["service_code"] for service in services]
     if st.session_state.get("form_selected_service") not in service_codes:
         st.session_state["form_selected_service"] = current_service_code
-    st.radio(
-        "Servicios",
-        service_codes,
-        key="form_selected_service",
-        format_func=_format_service_option,
-        on_change=_handle_service_selection_change,
-        label_visibility="collapsed",
-    )
+
+    st.markdown("##### Servicios")
+    st.caption("Seleccione un servicio del menú para editar sus etapas e indicadores.")
+    grouped_services = _group_services_by_axis(services)
+    for axis_name, axis_services in grouped_services:
+        st.markdown(
+            f'<div class="service-menu-group-title">{escape(axis_name)}</div>',
+            unsafe_allow_html=True,
+        )
+        for service in axis_services:
+            is_active = service["service_code"] == current_service_code
+            label = f"{service['indicator_count']} · {service['service_name']}"
+            if st.button(
+                label,
+                key=f"form_service_picker::{service['service_code']}",
+                type="primary" if is_active else "secondary",
+                width="stretch",
+            ):
+                _request_service_change(service["service_code"])
 
 
 def _render_service_editor(

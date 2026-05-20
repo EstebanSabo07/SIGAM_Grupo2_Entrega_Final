@@ -11,6 +11,7 @@ from typing import Any
 
 import pandas as pd
 
+from components.charts import distribucion_niveles_pie, madurez_servicios_horizontal
 from data.presentation_service import get_municipality_snapshot_view, get_national_snapshot_view
 from data.snapshot import AUDIENCE_ADMIN, AUDIENCE_MUNICIPAL, AUDIENCE_PUBLIC, SnapshotContext
 from data.text_utils import normalized_contains
@@ -34,6 +35,20 @@ def _reportlab_import_error() -> str | None:
     return None
 
 
+def _kaleido_import_error() -> str | None:
+    """Return the kaleido import error for the active runtime, when any.
+
+    Returns:
+        Import error text when ``kaleido`` is unavailable, otherwise ``None``.
+    """
+
+    try:
+        import kaleido  # noqa: F401
+    except ImportError as exc:
+        return str(exc)
+    return None
+
+
 def pdf_export_available() -> bool:
     """Return whether the formal PDF backend is available.
 
@@ -41,7 +56,7 @@ def pdf_export_available() -> bool:
         ``True`` when ``reportlab`` can be imported in the active runtime.
     """
 
-    return _reportlab_import_error() is None
+    return _reportlab_import_error() is None and _kaleido_import_error() is None
 
 
 def pdf_export_status() -> dict[str, Any]:
@@ -54,29 +69,61 @@ def pdf_export_status() -> dict[str, Any]:
 
     runtime_executable = sys.executable or "Python desconocido"
     streamlit_executable = shutil.which("streamlit")
-    import_error = _reportlab_import_error()
+    import_errors = {
+        "reportlab": _reportlab_import_error(),
+        "kaleido": _kaleido_import_error(),
+    }
+    missing_dependencies = [
+        dependency
+        for dependency, import_error in import_errors.items()
+        if import_error is not None
+    ]
 
     recommended_install_command = None
     if streamlit_executable:
         pip_executable = Path(streamlit_executable).with_name("pip.exe")
         if pip_executable.exists():
-            recommended_install_command = f'"{pip_executable}" install reportlab'
+            recommended_install_command = f'"{pip_executable}" install reportlab kaleido'
 
     if recommended_install_command is None and runtime_executable != "Python desconocido":
         runtime_path = Path(runtime_executable)
         pip_executable = runtime_path.with_name("pip.exe")
         if pip_executable.exists():
-            recommended_install_command = f'"{pip_executable}" install reportlab'
+            recommended_install_command = f'"{pip_executable}" install reportlab kaleido'
         else:
-            recommended_install_command = f'"{runtime_executable}" -m pip install reportlab'
+            recommended_install_command = f'"{runtime_executable}" -m pip install reportlab kaleido'
 
     return {
-        "available": import_error is None,
+        "available": not missing_dependencies,
         "runtime_executable": runtime_executable,
         "streamlit_executable": streamlit_executable,
-        "import_error": import_error,
+        "import_error": next((error for error in import_errors.values() if error), None),
+        "import_errors": import_errors,
+        "missing_dependencies": missing_dependencies,
         "recommended_install_command": recommended_install_command,
     }
+
+
+def pdf_unavailable_message(status: dict[str, Any] | None = None) -> str:
+    """Build a consistent warning message for missing PDF support.
+
+    Args:
+        status: Optional PDF backend status payload.
+
+    Returns:
+        Actionable message describing how to enable the formal PDF backend.
+    """
+
+    active_status = status or pdf_export_status()
+    message = "El backend de PDF formal no está disponible en el entorno actual de Streamlit."
+    if active_status.get("missing_dependencies"):
+        dependencies = ", ".join(active_status["missing_dependencies"])
+        message += f" Dependencias faltantes: {dependencies}."
+    if active_status.get("recommended_install_command"):
+        message += f" Instálelo con: `{active_status['recommended_install_command']}`."
+    if active_status.get("runtime_executable"):
+        message += f" Runtime activo: `{active_status['runtime_executable']}`."
+    return message
 
 
 def active_runtime_executable() -> str:
@@ -103,6 +150,7 @@ def export_csv(snapshot: SnapshotContext, audience: str, scope: dict[str, Any] |
 
     scope = scope or {}
     municipality_code = scope.get("municipality_code")
+    include_service_detail = bool(scope.get("include_service_detail"))
     if municipality_code:
         view = get_municipality_snapshot_view(municipality_code, snapshot, audience)
         if audience == AUDIENCE_ADMIN:
@@ -149,6 +197,32 @@ def export_csv(snapshot: SnapshotContext, audience: str, scope: dict[str, Any] |
 
     national = get_national_snapshot_view(snapshot, audience)
     if audience == AUDIENCE_ADMIN:
+        if include_service_detail:
+            rows = []
+            for municipality in national["municipalities"]:
+                for service in municipality["services"]:
+                    rows.append(
+                        {
+                            "periodo": snapshot.label,
+                            "codigo": municipality["municipality"]["codigo"],
+                            "municipalidad": municipality["municipality"]["nombre"],
+                            "provincia": municipality["municipality"].get("provincia"),
+                            "region": municipality["municipality"].get("region"),
+                            "eje": service.get("axis_name"),
+                            "servicio": service["service_name"],
+                            "puntaje": round(service["score"] * 100, 2),
+                            "nivel": service["level"],
+                            "estado_operativo": service.get("operational_status"),
+                            "fecha_actualizacion": (
+                                service["update_date"].isoformat()
+                                if service.get("update_date")
+                                else None
+                            ),
+                            "antiguedad_meses": service.get("data_age_months"),
+                        }
+                    )
+            return pd.DataFrame(rows).to_csv(index=False).encode("utf-8-sig")
+
         rows = [
             {
                 "periodo": snapshot.label,
@@ -184,7 +258,7 @@ def export_pdf(
     scope: dict[str, Any] | None = None,
     filters: dict[str, Any] | None = None,
 ) -> bytes:
-    """Export a lightweight PDF summary for a snapshot scope.
+    """Export a formal PDF report for a snapshot scope.
 
     Args:
         snapshot: Snapshot context.
@@ -199,48 +273,84 @@ def export_pdf(
     scope = scope or {}
     filters = filters or {}
     status = pdf_export_status()
-    if audience in {AUDIENCE_PUBLIC, AUDIENCE_MUNICIPAL} and not status["available"]:
-        raise RuntimeError(
-            "El backend de PDF formal no está disponible en este entorno. "
-            "Instale reportlab en el intérprete que ejecuta Streamlit."
-        )
+    if not status["available"]:
+        raise RuntimeError(pdf_unavailable_message(status))
     municipality_code = scope.get("municipality_code")
     if municipality_code:
         view = get_municipality_snapshot_view(municipality_code, snapshot, audience)
         if audience == AUDIENCE_MUNICIPAL:
             return _municipal_pdf_bytes(snapshot, view)
-        lines = [
-            f"Periodo: {snapshot.label}",
-            f"Municipalidad: {view['municipality']['nombre']}",
-            f"Nivel de madurez: {view['level']}",
-        ]
         if audience == AUDIENCE_ADMIN:
-            lines.append(f"Puntaje: {view['puntaje_pct']}%")
-        else:
-            lines.append("Resumen por servicio:")
-            for service in view["services"][:8]:
-                if audience == AUDIENCE_MUNICIPAL:
-                    lines.append(
-                        f"- {service['service_name']}: {service['level']} | {service['operational_status']}"
-                    )
-                else:
-                    lines.append(f"- {service['service_name']}: {service['level']}")
-        return _simple_pdf_bytes("SIGAM Municipal", lines)
+            return _admin_municipal_pdf_bytes(snapshot, view)
 
     view = get_national_snapshot_view(snapshot, audience)
     if audience == AUDIENCE_PUBLIC:
         report = _build_public_report_payload(snapshot, filters)
         return _public_pdf_bytes(snapshot, report, filters)
 
-    lines = [
-        f"Periodo: {snapshot.label}",
-        f"Municipalidades consideradas: {view['total_municipalities']}",
+    return _admin_national_pdf_bytes(snapshot, view)
+
+
+def _build_service_maturity_frame(services: list[dict[str, Any]]) -> pd.DataFrame:
+    """Build a dataframe compatible with the shared service-maturity chart.
+
+    Args:
+        services: Service rows with at least ``service_name`` and ``level``.
+
+    Returns:
+        Dataframe sorted later by the chart builder.
+    """
+
+    rows = [
+        {
+            "service_name": service["service_name"],
+            "predominant_level": service["level"],
+            "maturity_index": LEVEL_INDEX.get(service["level"], 1),
+            "maturity_label": service["level"],
+        }
+        for service in services
     ]
-    for level, count in sorted(view["distribution_by_level"].items()):
-        lines.append(f"- {level}: {count}")
-    if audience == AUDIENCE_ADMIN:
-        lines.append(f"Promedio nacional: {round(view['average_score'] * 100, 2)}%")
-    return _simple_pdf_bytes("SIGAM Nacional", lines)
+    return pd.DataFrame(rows)
+
+
+def _plotly_figure_to_reportlab_image(
+    figure: Any,
+    width_inches: float,
+    height_inches: float,
+) -> Any:
+    """Render a Plotly figure into a ReportLab image flowable.
+
+    Args:
+        figure: Plotly figure instance.
+        width_inches: Target width in inches inside the PDF.
+        height_inches: Target height in inches inside the PDF.
+
+    Returns:
+        ReportLab image flowable ready for ``story.append``.
+
+    Raises:
+        RuntimeError: If Plotly cannot render the figure into PNG bytes.
+    """
+
+    import plotly.io as pio
+    from reportlab.lib.units import inch
+    from reportlab.platypus import Image
+
+    try:
+        png_bytes = pio.to_image(
+            figure,
+            format="png",
+            width=int(width_inches * 144),
+            height=int(height_inches * 144),
+            scale=2,
+        )
+    except Exception as exc:
+        raise RuntimeError(
+            "No se pudo renderizar el gráfico de Plotly para el PDF. "
+            "Verifique la instalación de kaleido en el runtime activo."
+        ) from exc
+
+    return Image(io.BytesIO(png_bytes), width=width_inches * inch, height=height_inches * inch)
 
 
 def _municipal_pdf_bytes(snapshot: SnapshotContext, view: dict[str, Any]) -> bytes:
@@ -307,6 +417,18 @@ def _municipal_pdf_bytes(snapshot: SnapshotContext, view: dict[str, Any]) -> byt
         ),
         Spacer(1, 10),
     ]
+    maturity_df = _build_service_maturity_frame(view["services"])
+    maturity_chart = _plotly_figure_to_reportlab_image(
+        madurez_servicios_horizontal(
+            maturity_df,
+            height=max(360, len(maturity_df) * 30 + 120),
+            prefer_inside_text=True,
+            margin_left=190,
+            margin_right=80,
+        ),
+        width_inches=6.85,
+        height_inches=4.15,
+    )
     service_rows = [["Servicio", "Estado", "Completitud", "Antigüedad", "Última actualización"]]
     for service in view["priority_services"]:
         service_rows.append(
@@ -336,7 +458,49 @@ def _municipal_pdf_bytes(snapshot: SnapshotContext, view: dict[str, Any]) -> byt
             ]
         )
     )
-    story.append(services_table)
+    story.extend(
+        [
+            Paragraph("Completitud y vigencia por servicio", styles["Heading2"]),
+            Spacer(1, 6),
+            services_table,
+            Spacer(1, 14),
+            Paragraph("Nivel de madurez por servicio", styles["Heading2"]),
+            Spacer(1, 4),
+            Paragraph(
+                (
+                    "La siguiente visual resume el nivel predominante observado en cada servicio "
+                    "durante el período consultado."
+                ),
+                styles["SigamBodyMunicipal"],
+            ),
+            Spacer(1, 8),
+            maturity_chart,
+            Spacer(1, 12),
+        ]
+    )
+
+    maturity_rows = [["Servicio", "Nivel de madurez", "Completitud", "Antigüedad"]]
+    for service in sorted(
+        view["services"],
+        key=lambda item: (LEVEL_INDEX.get(item["level"], 1), item["service_name"]),
+    ):
+        maturity_rows.append(
+            [
+                service["service_name"],
+                service["level"],
+                f"{service['service_progress_pct']:.0f}%",
+                f"{service['data_age_months'] if service['data_age_months'] is not None else '—'} mes(es)",
+            ]
+        )
+    maturity_table = Table(maturity_rows, repeatRows=1, colWidths=[225, 120, 85, 95])
+    maturity_table.setStyle(TableStyle(_pdf_table_style(colors, font_size=8.2)))
+    story.extend(
+        [
+            Paragraph("Resumen de madurez por servicio", styles["Heading2"]),
+            Spacer(1, 6),
+            maturity_table,
+        ]
+    )
 
     def draw_header(canvas, document) -> None:
         """Draw a consistent municipal SIGAM header on each page."""
@@ -347,6 +511,259 @@ def _municipal_pdf_bytes(snapshot: SnapshotContext, view: dict[str, Any]) -> byt
         canvas.setFillColor(colors.white)
         canvas.setFont("Helvetica-Bold", 12)
         canvas.drawString(46, letter[1] - 28, "SIGAM · Portal municipal")
+        canvas.setFont("Helvetica", 9)
+        canvas.drawRightString(letter[0] - 46, letter[1] - 28, f"Corte {snapshot.label}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=draw_header, onLaterPages=draw_header)
+    return buffer.getvalue()
+
+
+def _pdf_table_style(colors: Any, font_size: float = 8.3) -> Any:
+    """Build the default ReportLab table style used across formal PDFs.
+
+    Args:
+        colors: ReportLab colors module.
+        font_size: Table font size.
+
+    Returns:
+        List of ReportLab table-style commands.
+    """
+
+    return [
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1A3A6B")),
+        ("TEXTCOLOR", (0, 0), (-1, 0), colors.white),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, -1), font_size),
+        ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#F8FAFC")]),
+        ("GRID", (0, 0), (-1, -1), 0.35, colors.HexColor("#D8E4F2")),
+        ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+        ("LEFTPADDING", (0, 0), (-1, -1), 6),
+        ("RIGHTPADDING", (0, 0), (-1, -1), 6),
+        ("TOPPADDING", (0, 0), (-1, -1), 5),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
+    ]
+
+
+def _admin_municipal_pdf_bytes(snapshot: SnapshotContext, view: dict[str, Any]) -> bytes:
+    """Generate the formal admin municipal PDF report.
+
+    Args:
+        snapshot: Snapshot context.
+        view: Administrator municipal view model.
+
+    Returns:
+        PDF bytes.
+    """
+
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    benchmark = view.get("benchmark_summary", {})
+    position_national = benchmark.get("position_national")
+    total_national = benchmark.get("total_national")
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=0.65 * inch,
+        rightMargin=0.65 * inch,
+        topMargin=0.9 * inch,
+        bottomMargin=0.65 * inch,
+        pageCompression=0,
+    )
+    styles = getSampleStyleSheet()
+    styles.add(
+        ParagraphStyle(
+            name="SigamBodyAdminMunicipal",
+            parent=styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=9.5,
+            leading=13,
+            textColor=colors.HexColor("#334155"),
+            alignment=TA_LEFT,
+        )
+    )
+    story = [
+        Paragraph("Reporte municipal interno SIGAM", styles["Title"]),
+        Spacer(1, 8),
+        Paragraph(
+            (
+                "Resumen técnico de puntajes, vigencia y avance por servicio para la "
+                "municipalidad seleccionada desde el portal interno de Contraloría."
+            ),
+            styles["SigamBodyAdminMunicipal"],
+        ),
+        Spacer(1, 10),
+        Paragraph(f"<b>Período:</b> {snapshot.label}", styles["SigamBodyAdminMunicipal"]),
+        Paragraph(f"<b>Municipalidad:</b> {view['municipality']['nombre']}", styles["SigamBodyAdminMunicipal"]),
+        Paragraph(f"<b>Nivel vigente:</b> {view['level']}", styles["SigamBodyAdminMunicipal"]),
+        Paragraph(
+            f"<b>Puntaje total:</b> {view['puntaje_pct']:.2f}%",
+            styles["SigamBodyAdminMunicipal"],
+        ),
+        Paragraph(
+            (
+                "<b>Posición nacional:</b> "
+                f"{f'{position_national}/{total_national}' if position_national else 'Sin dato'}"
+            ),
+            styles["SigamBodyAdminMunicipal"],
+        ),
+        Spacer(1, 10),
+    ]
+
+    service_rows = [["Servicio", "Nivel", "Puntaje", "Estado", "Antigüedad", "Actualización"]]
+    for service in view["services"]:
+        update_date = service["update_date"].isoformat() if service.get("update_date") else "Sin registros"
+        service_rows.append(
+            [
+                service["service_name"],
+                service["level"],
+                f"{service['score'] * 100:.2f}%",
+                service["operational_status"],
+                f"{service['data_age_months'] if service['data_age_months'] is not None else '—'} mes(es)",
+                update_date,
+            ]
+        )
+    services_table = Table(service_rows, repeatRows=1, colWidths=[155, 72, 62, 95, 75, 85])
+    services_table.setStyle(TableStyle(_pdf_table_style(colors, font_size=8.0)))
+    story.append(services_table)
+
+    def draw_header(canvas, document) -> None:
+        """Draw a consistent admin municipal SIGAM header on each page."""
+
+        canvas.saveState()
+        canvas.setFillColor(colors.HexColor("#1A3A6B"))
+        canvas.rect(0, letter[1] - 44, letter[0], 44, fill=1, stroke=0)
+        canvas.setFillColor(colors.white)
+        canvas.setFont("Helvetica-Bold", 12)
+        canvas.drawString(46, letter[1] - 28, "SIGAM · Reporte municipal interno")
+        canvas.setFont("Helvetica", 9)
+        canvas.drawRightString(letter[0] - 46, letter[1] - 28, f"Corte {snapshot.label}")
+        canvas.restoreState()
+
+    doc.build(story, onFirstPage=draw_header, onLaterPages=draw_header)
+    return buffer.getvalue()
+
+
+def _admin_national_pdf_bytes(snapshot: SnapshotContext, view: dict[str, Any]) -> bytes:
+    """Generate the formal admin national PDF report.
+
+    Args:
+        snapshot: Snapshot context.
+        view: Administrator national view model.
+
+    Returns:
+        PDF bytes.
+    """
+
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.pagesizes import letter
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import inch
+    from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+
+    buffer = io.BytesIO()
+    doc = SimpleDocTemplate(
+        buffer,
+        pagesize=letter,
+        leftMargin=0.65 * inch,
+        rightMargin=0.65 * inch,
+        topMargin=0.95 * inch,
+        bottomMargin=0.65 * inch,
+        pageCompression=0,
+    )
+    styles = getSampleStyleSheet()
+    styles.add(
+        ParagraphStyle(
+            name="SigamBodyAdmin",
+            parent=styles["BodyText"],
+            fontName="Helvetica",
+            fontSize=9.5,
+            leading=13,
+            textColor=colors.HexColor("#334155"),
+            alignment=TA_LEFT,
+        )
+    )
+    level_summary = " · ".join(
+        f"{level}: {count}" for level, count in view["distribution_by_level"].items()
+    )
+    story = [
+        Paragraph("Reporte nacional interno SIGAM", styles["Title"]),
+        Spacer(1, 8),
+        Paragraph(
+            (
+                "Resumen interno para Contraloría con ranking nacional, promedio por servicio "
+                "y distribución de madurez en el período seleccionado."
+            ),
+            styles["SigamBodyAdmin"],
+        ),
+        Spacer(1, 10),
+        Paragraph(f"<b>Período:</b> {snapshot.label}", styles["SigamBodyAdmin"]),
+        Paragraph(
+            f"<b>Municipalidades consideradas:</b> {view['total_municipalities']}",
+            styles["SigamBodyAdmin"],
+        ),
+        Paragraph(
+            f"<b>Promedio nacional:</b> {view['average_score'] * 100:.2f}%",
+            styles["SigamBodyAdmin"],
+        ),
+        Paragraph(f"<b>Distribución por nivel:</b> {level_summary}", styles["SigamBodyAdmin"]),
+        Spacer(1, 10),
+    ]
+
+    service_rows = [["Servicio", "Nivel predominante", "Puntaje promedio"]]
+    for service in view["service_summaries"]:
+        service_rows.append(
+            [
+                service["service_name"],
+                service["predominant_level"],
+                f"{service['puntaje_pct']:.2f}%",
+            ]
+        )
+    services_table = Table(service_rows, repeatRows=1, colWidths=[250, 130, 110])
+    services_table.setStyle(TableStyle(_pdf_table_style(colors, font_size=8.3)))
+    story.extend(
+        [
+            Paragraph("Promedio por servicio", styles["Heading2"]),
+            Spacer(1, 6),
+            services_table,
+            PageBreak(),
+            Paragraph("Ranking nacional visible", styles["Heading2"]),
+            Spacer(1, 6),
+        ]
+    )
+
+    ranking_rows = [["Posición", "Municipalidad", "Provincia", "Región", "Nivel", "Puntaje"]]
+    for municipality in view["municipalities"][:28]:
+        ranking_rows.append(
+            [
+                municipality["position"],
+                municipality["municipality"]["nombre"],
+                municipality["municipality"].get("provincia") or "—",
+                municipality["municipality"].get("region") or "—",
+                municipality["level"],
+                f"{municipality['puntaje_pct']:.2f}%",
+            ]
+        )
+    ranking_table = Table(ranking_rows, repeatRows=1, colWidths=[48, 150, 100, 88, 80, 64])
+    ranking_table.setStyle(TableStyle(_pdf_table_style(colors, font_size=8.0)))
+    story.append(ranking_table)
+
+    def draw_header(canvas, document) -> None:
+        """Draw a consistent admin national SIGAM header on each page."""
+
+        canvas.saveState()
+        canvas.setFillColor(colors.HexColor("#1A3A6B"))
+        canvas.rect(0, letter[1] - 44, letter[0], 44, fill=1, stroke=0)
+        canvas.setFillColor(colors.white)
+        canvas.setFont("Helvetica-Bold", 12)
+        canvas.drawString(46, letter[1] - 28, "SIGAM · Reporte nacional interno")
         canvas.setFont("Helvetica", 9)
         canvas.drawRightString(letter[0] - 46, letter[1] - 28, f"Corte {snapshot.label}")
         canvas.restoreState()
@@ -462,9 +879,6 @@ def _public_pdf_bytes(
         PDF bytes.
     """
 
-    from reportlab.graphics.charts.barcharts import HorizontalBarChart
-    from reportlab.graphics.charts.piecharts import Pie
-    from reportlab.graphics.shapes import Drawing, Rect, String
     from reportlab.lib import colors
     from reportlab.lib.enums import TA_LEFT
     from reportlab.lib.pagesizes import letter
@@ -472,13 +886,6 @@ def _public_pdf_bytes(
     from reportlab.lib.units import inch
     from reportlab.platypus import PageBreak, Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
 
-    level_colors = {
-        "Inicial": colors.HexColor("#DC3545"),
-        "Básico": colors.HexColor("#FD7E14"),
-        "Intermedio": colors.HexColor("#2196F3"),
-        "Avanzado": colors.HexColor("#20C997"),
-        "Optimizando": colors.HexColor("#7B2FBE"),
-    }
     buffer = io.BytesIO()
     doc = SimpleDocTemplate(
         buffer,
@@ -513,6 +920,31 @@ def _public_pdf_bytes(
             spaceBefore=4,
         )
     )
+    distribution_chart = _plotly_figure_to_reportlab_image(
+        distribucion_niveles_pie(report["distribution"], height=340),
+        width_inches=5.8,
+        height_inches=3.2,
+    )
+    service_frame = _build_service_maturity_frame(
+        [
+            {
+                "service_name": service["service_name"],
+                "level": service["predominant_level"],
+            }
+            for service in report["service_summaries"]
+        ]
+    )
+    service_chart = _plotly_figure_to_reportlab_image(
+        madurez_servicios_horizontal(
+            service_frame,
+            height=max(360, len(service_frame) * 28 + 120),
+            prefer_inside_text=True,
+            margin_left=210,
+            margin_right=90,
+        ),
+        width_inches=6.9,
+        height_inches=4.2,
+    )
 
     story = [
         Paragraph("Dashboard Público de Gestión Municipal", styles["Title"]),
@@ -544,14 +976,7 @@ def _public_pdf_bytes(
                 styles["SigamBody"],
             ),
             Spacer(1, 6),
-            _build_distribution_drawing(
-                report["distribution"],
-                level_colors,
-                Pie,
-                Drawing,
-                Rect,
-                String,
-            ),
+            distribution_chart,
             Spacer(1, 12),
             Paragraph("Madurez por servicio", styles["SigamSection"]),
             Paragraph(
@@ -562,14 +987,7 @@ def _public_pdf_bytes(
                 styles["SigamBody"],
             ),
             Spacer(1, 6),
-            _build_service_chart_drawing(
-                report["service_summaries"],
-                level_colors,
-                HorizontalBarChart,
-                Drawing,
-                String,
-                colors,
-            ),
+            service_chart,
             PageBreak(),
             Paragraph("Municipalidades visibles", styles["SigamSection"]),
             Paragraph(
@@ -619,127 +1037,6 @@ def _filters_as_lines(filters: dict[str, Any]) -> list[str]:
     ]
 
 
-def _build_distribution_drawing(
-    distribution: dict[str, int],
-    level_colors: dict[str, Any],
-    pie_class: Any,
-    drawing_class: Any,
-    rect_class: Any,
-    string_class: Any,
-) -> Any:
-    """Create the public distribution chart drawing for the PDF report.
-
-    Args:
-        distribution: Level distribution counts.
-        level_colors: ReportLab colors keyed by level.
-        pie_class: ReportLab pie chart class.
-        drawing_class: ReportLab drawing class.
-        rect_class: ReportLab rectangle shape class.
-        string_class: ReportLab string class.
-
-    Returns:
-        ReportLab drawing instance.
-    """
-
-    drawing = drawing_class(480, 230)
-    pie = pie_class()
-    pie.x = 32
-    pie.y = 24
-    pie.width = 180
-    pie.height = 180
-    labels = [level for level in LEVEL_ORDER if distribution.get(level, 0) > 0]
-    values = [distribution.get(level, 0) for level in labels]
-    pie.data = values or [1]
-    pie.labels = labels or ["Sin datos"]
-    pie.slices.strokeWidth = 0.5
-    for index, level in enumerate(labels):
-        pie.slices[index].fillColor = level_colors[level]
-    drawing.add(pie)
-    drawing.add(string_class(260, 190, "Distribución por nivel", fontName="Helvetica-Bold", fontSize=11))
-    y = 168
-    for level in labels:
-        drawing.add(
-            rect_class(
-                260,
-                y - 8,
-                10,
-                10,
-                fillColor=level_colors[level],
-                strokeColor=level_colors[level],
-            )
-        )
-        drawing.add(
-            string_class(
-                276,
-                y - 6,
-                f"{level}: {distribution[level]}",
-                fontName="Helvetica",
-                fontSize=9,
-            )
-        )
-        y -= 20
-    return drawing
-
-
-def _build_service_chart_drawing(
-    services: list[dict[str, Any]],
-    level_colors: dict[str, Any],
-    bar_chart_class: Any,
-    drawing_class: Any,
-    string_class: Any,
-    colors: Any,
-) -> Any:
-    """Create the public service-maturity chart drawing for the PDF report.
-
-    Args:
-        services: Public service summaries with ordinal maturity values.
-        level_colors: ReportLab colors keyed by level.
-        bar_chart_class: ReportLab horizontal bar chart class.
-        drawing_class: ReportLab drawing class.
-        string_class: ReportLab string class.
-        colors: ReportLab colors module.
-
-    Returns:
-        ReportLab drawing instance.
-    """
-
-    sorted_services = sorted(services, key=lambda item: item["maturity_index"])
-    top_services = sorted_services[:10]
-    drawing = drawing_class(480, 280)
-    chart = bar_chart_class()
-    chart.x = 140
-    chart.y = 28
-    chart.width = 300
-    chart.height = 210
-    chart.data = [[service["maturity_index"] for service in top_services]]
-    chart.valueAxis.valueMin = 0
-    chart.valueAxis.valueMax = 5
-    chart.valueAxis.valueSteps = [1, 2, 3, 4, 5]
-    chart.categoryAxis.labels.boxAnchor = "e"
-    chart.categoryAxis.labels.dx = -8
-    chart.categoryAxis.categoryNames = [service["service_name"][:34] for service in top_services]
-    chart.bars[0].fillColor = colors.HexColor("#1A3A6B")
-    chart.bars[0].strokeColor = colors.HexColor("#1A3A6B")
-    chart.barSpacing = 4
-    chart.groupSpacing = 8
-    drawing.add(chart)
-    drawing.add(string_class(140, 248, "Madurez ordinal por servicio", fontName="Helvetica-Bold", fontSize=11))
-    y = 228
-    for service in top_services:
-        drawing.add(
-            string_class(
-                24,
-                y,
-                service["predominant_level"],
-                fontName="Helvetica",
-                fontSize=7,
-                fillColor=level_colors.get(service["predominant_level"]),
-            )
-        )
-        y -= 20
-    return drawing
-
-
 def _build_public_table(dataframe: pd.DataFrame, table_class: Any, table_style_class: Any, colors: Any) -> Any:
     """Create the always-visible public municipality table for the PDF report.
 
@@ -776,50 +1073,3 @@ def _build_public_table(dataframe: pd.DataFrame, table_class: Any, table_style_c
     return table
 
 
-def _simple_pdf_bytes(title: str, lines: list[str]) -> bytes:
-    """Generate a minimal single-page PDF document.
-
-    Args:
-        title: PDF title.
-        lines: Body lines to print.
-
-    Returns:
-        PDF bytes.
-    """
-
-    escaped_lines = [title, ""] + lines
-    text_lines = [f"({line.replace('\\', '\\\\').replace('(', '\\(').replace(')', '\\)')}) Tj" for line in escaped_lines]
-    commands = ["BT", "/F1 18 Tf", "50 780 Td"] + text_lines[:1]
-    for line in text_lines[1:]:
-        commands.extend(["T*", line])
-    commands.append("ET")
-    stream = "\n".join(commands).encode("latin-1", errors="replace")
-    objects = []
-    objects.append(b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n")
-    objects.append(b"2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj\n")
-    objects.append(
-        b"3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-        b"/Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >> endobj\n"
-    )
-    objects.append(b"4 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj\n")
-    objects.append(
-        f"5 0 obj << /Length {len(stream)} >> stream\n".encode("latin-1")
-        + stream
-        + b"\nendstream endobj\n"
-    )
-
-    output = io.BytesIO()
-    output.write(b"%PDF-1.4\n")
-    offsets = [0]
-    for obj in objects:
-        offsets.append(output.tell())
-        output.write(obj)
-    xref_position = output.tell()
-    output.write(f"xref\n0 {len(objects) + 1}\n".encode("latin-1"))
-    output.write(b"0000000000 65535 f \n")
-    for offset in offsets[1:]:
-        output.write(f"{offset:010d} 00000 n \n".encode("latin-1"))
-    output.write(
-        f"trailer << /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_position}\n%%EOF".encode("latin-1")
-    )
-    return output.getvalue()

@@ -29,6 +29,41 @@ LABEL_DESCRIPTIONS = [
 ]
 
 
+def _priority_badge_html(label: str) -> str:
+    """Build the badge HTML used in the priority legend.
+
+    Args:
+        label: Priority or maturity label.
+
+    Returns:
+        Raw HTML badge string.
+    """
+
+    if label == "Necesitan actualización":
+        return '<span class="service-pill service-pill-urgent">Necesitan actualización</span>'
+    return nivel_badge(label)
+
+
+def _build_priority_legend_html() -> str:
+    """Build the full HTML payload for the priority legend.
+
+    Returns:
+        HTML string rendered above the priority grid.
+    """
+
+    items = []
+    for label, description in LABEL_DESCRIPTIONS:
+        items.append(
+            (
+                '<div class="service-legend-item">'
+                f"{_priority_badge_html(label)}"
+                f"<span>{escape(description)}</span>"
+                "</div>"
+            )
+        )
+    return f'<div class="service-grid-legend service-grid-legend-wide">{"".join(items)}</div>'
+
+
 def _normalize_priority_label(service: dict) -> str:
     """Return the public-facing priority label for a municipal service.
 
@@ -82,27 +117,7 @@ def _build_service_maturity_frame(services: list[dict]) -> pd.DataFrame:
 def _render_priority_legend() -> None:
     """Render the compact legend for the municipal priority grid."""
 
-    items = [
-        """
-        <span class="service-legend-item">
-            <span class="service-pill service-pill-urgent">Necesitan actualización</span>
-            Datos viejos o incompletos que deben atenderse primero.
-        </span>
-        """
-    ]
-    for label, description in LABEL_DESCRIPTIONS[1:]:
-        items.append(
-            f"""
-            <span class="service-legend-item">
-                {nivel_badge(label)}
-                {escape(description)}
-            </span>
-            """
-        )
-    st.markdown(
-        f'<div class="service-grid-legend service-grid-legend-wide">{"".join(items)}</div>',
-        unsafe_allow_html=True,
-    )
+    st.markdown(_build_priority_legend_html(), unsafe_allow_html=True)
 
 
 def _render_priority_grid(services: list[dict]) -> None:
@@ -151,6 +166,7 @@ def _render_ranking_context(title: str, description: str, rows: list[dict]) -> N
         """,
         unsafe_allow_html=True,
     )
+    st.markdown('<div class="ranking-list-gap" style="height: 28px; margin-bottom: 0.75rem;"></div>', unsafe_allow_html=True)
     if not rows:
         st.markdown('<div class="kanban-empty">No hay ranking disponible.</div></div>', unsafe_allow_html=True)
         return
@@ -268,6 +284,7 @@ def show() -> None:
         )
 
     st.markdown("##### Su posición en la lista")
+    st.markdown('<div class="section-gap"></div>', unsafe_allow_html=True)
     ranking_cols = st.columns(3)
     ranking_views = [
         (

@@ -5,6 +5,7 @@
 
 import streamlit as st
 from data.snapshot import AUDIENCE_ADMIN, AUDIENCE_MUNICIPAL, AUDIENCE_PUBLIC, current_snapshot
+from database.bootstrap import ensure_database_ready
 
 # ── Configuración de página ───────────────────────────────────────────────────
 st.set_page_config(
@@ -13,6 +14,10 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+if "_database_ready" not in st.session_state:
+    ensure_database_ready()
+    st.session_state["_database_ready"] = True
 
 # ── Cargar CSS global ─────────────────────────────────────────────────────────
 from components.ui import load_css, sidebar_muni, sidebar_admin
@@ -58,6 +63,10 @@ if page in ("landing", None):
 
 elif page == "login":
     from views.login import show
+    show()
+
+elif page == "loading":
+    from views.loading import show
     show()
 
 # Portal Municipalidad

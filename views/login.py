@@ -2,14 +2,32 @@
 
 # views/login.py — Acceso simplificado: municipalidad (código) o admin
 
-import streamlit as st
 from pathlib import Path
+
+import streamlit as st
+
 from data.municipalities import MUNICIPALIDADES, CODIGOS_ACCESO
 
 ADMIN_USUARIO = "contraloria"
 ADMIN_CLAVE   = "cgr2025"
 
-def show():
+
+def _start_loading_transition(target_page: str, target_role: str) -> None:
+    """Queue an interstitial loading screen before entering the portal.
+
+    Args:
+        target_page: Destination page after the loading screen.
+        target_role: Session role entering the portal.
+    """
+
+    st.session_state["pending_page"] = target_page
+    st.session_state["loading_target_role"] = target_role
+    st.session_state["page"] = "loading"
+    st.query_params.clear()
+    st.rerun()
+
+
+def show() -> None:
     """Render the login page.
 
     The page authenticates demo municipal and administrator users, then updates
@@ -57,9 +75,7 @@ def show():
                             st.session_state["muni_codigo"]  = muni_data["codigo"]
                             st.session_state["municipalidad_codigo"] = muni_data["codigo"]
                             st.session_state["diversificados"]= muni_data["diversificados"]
-                            st.session_state["page"]         = "muni_home"
-                            st.query_params.clear()
-                            st.rerun()
+                            _start_loading_transition("muni_home", "municipalidad")
                         else:
                             st.error("Código incorrecto. Para la demo use: **1234**")
                     else:
@@ -83,9 +99,7 @@ def show():
             if st.button("Ingresar →", type="primary", width="stretch"):
                 if usuario == ADMIN_USUARIO and clave == ADMIN_CLAVE:
                     st.session_state["rol"]  = "admin"
-                    st.session_state["page"] = "admin_dashboard"
-                    st.query_params.clear()
-                    st.rerun()
+                    _start_loading_transition("admin_dashboard", "admin")
                 else:
                     st.error("Credenciales incorrectas. Demo: **contraloria** / **cgr2025**")
 

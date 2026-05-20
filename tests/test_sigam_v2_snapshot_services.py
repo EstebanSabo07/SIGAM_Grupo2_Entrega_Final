@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 from uuid import uuid4
 
+from components.charts import madurez_servicios_horizontal
 from sqlalchemy import select
 
 from data.catalog_service import get_form_tree
@@ -26,7 +27,7 @@ from database.repositories import save_indicator_response_versions
 from database.seed import seed_all
 from database.session import get_engine, get_session_factory, session_scope
 from views.muni_form import _can_navigate_without_prompt
-from views.muni_results import _build_service_maturity_frame, _normalize_priority_label
+from views.muni_results import _build_priority_legend_html, _build_service_maturity_frame, _normalize_priority_label
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -400,8 +401,72 @@ class SigamV2SnapshotServiceTests(unittest.TestCase):
         finally:
             self._dispose(database_url)
 
-    def test_public_and_municipal_pdf_require_formal_backend(self) -> None:
-        """Validate public and municipal PDF exports refuse degraded fallback generation."""
+    def test_admin_national_csv_can_include_service_detail(self) -> None:
+        """Validate the national admin CSV can expand to one row per service."""
+
+        database_url = self._database_url(f"sigam_v2_{uuid4().hex}.sqlite3")
+        try:
+            engine = get_engine(database_url)
+            Base.metadata.create_all(engine)
+            self._activate_database(database_url)
+            with session_scope(database_url) as session:
+                seed_all(session=session)
+                municipality = session.execute(select(DMMunicipality).order_by(DMMunicipality.code)).scalars().first()
+                save_indicator_response_versions(
+                    municipality.code,
+                    [{"indicator_code": "1.1.1.1", "value": 1.0, "evidence_files": []}],
+                    submitted_at=date(2026, 4, 10),
+                    session=session,
+                )
+
+            csv_output = export_csv(
+                SnapshotContext(2026, 4, AUDIENCE_ADMIN),
+                AUDIENCE_ADMIN,
+                {"include_service_detail": True},
+            ).decode("utf-8-sig")
+
+            self.assertIn("servicio", csv_output)
+            self.assertIn("estado_operativo", csv_output)
+            self.assertIn("antiguedad_meses", csv_output)
+            self.assertNotIn(",etapa,", csv_output)
+        finally:
+            self._dispose(database_url)
+
+    def test_admin_pdf_exports_use_formal_backend(self) -> None:
+        """Validate admin exports now use formal PDFs for national and municipal scopes."""
+
+        database_url = self._database_url(f"sigam_v2_{uuid4().hex}.sqlite3")
+        try:
+            engine = get_engine(database_url)
+            Base.metadata.create_all(engine)
+            self._activate_database(database_url)
+            with session_scope(database_url) as session:
+                seed_all(session=session)
+                municipality = session.execute(select(DMMunicipality).order_by(DMMunicipality.code)).scalars().first()
+                save_indicator_response_versions(
+                    municipality.code,
+                    [{"indicator_code": "1.1.1.1", "value": 1.0, "evidence_files": []}],
+                    submitted_at=date(2026, 4, 10),
+                    session=session,
+                )
+
+            snapshot = SnapshotContext(2026, 4, AUDIENCE_ADMIN)
+            national_pdf = export_pdf(snapshot, AUDIENCE_ADMIN)
+            municipal_pdf = export_pdf(snapshot, AUDIENCE_ADMIN, {"municipality_code": municipality.code})
+            national_text = national_pdf.decode("latin-1", errors="ignore")
+            municipal_text = municipal_pdf.decode("latin-1", errors="ignore")
+
+            self.assertTrue(national_pdf.startswith(b"%PDF"))
+            self.assertTrue(municipal_pdf.startswith(b"%PDF"))
+            self.assertGreater(len(national_pdf), 3000)
+            self.assertGreater(len(municipal_pdf), 2500)
+            self.assertTrue("Reporte nacional interno" in national_text or "SIGAM" in national_text)
+            self.assertTrue("Reporte municipal interno" in municipal_text or "SIGAM" in municipal_text)
+        finally:
+            self._dispose(database_url)
+
+    def test_all_pdf_exports_require_formal_backend(self) -> None:
+        """Validate every audience now requires the formal PDF backend."""
 
         with patch("data.reporting_service._reportlab_import_error", return_value="No module named 'reportlab'"):
             with self.assertRaisesRegex(RuntimeError, "backend de PDF formal"):
@@ -412,23 +477,32 @@ class SigamV2SnapshotServiceTests(unittest.TestCase):
                     AUDIENCE_MUNICIPAL,
                     {"municipality_code": "MUNI-TEST"},
                 )
+            with self.assertRaisesRegex(RuntimeError, "backend de PDF formal"):
+                export_pdf(SnapshotContext(2026, 4, AUDIENCE_ADMIN), AUDIENCE_ADMIN)
+        with patch("data.reporting_service._kaleido_import_error", return_value="No module named 'kaleido'"):
+            with self.assertRaisesRegex(RuntimeError, "backend de PDF formal"):
+                export_pdf(SnapshotContext(2026, 4, AUDIENCE_PUBLIC), AUDIENCE_PUBLIC)
 
     def test_pdf_export_status_reports_runtime_and_install_command(self) -> None:
         """Validate PDF diagnostics expose the active runtime and install command."""
 
         with patch("data.reporting_service._reportlab_import_error", return_value="No module named 'reportlab'"):
-            with patch(
-                "data.reporting_service.shutil.which",
-                return_value=(
-                    "C:\\Users\\Jason\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0"
-                    "\\LocalCache\\local-packages\\Python313\\Scripts\\streamlit.exe"
-                ),
-            ):
-                status = pdf_export_status()
+            with patch("data.reporting_service._kaleido_import_error", return_value="No module named 'kaleido'"):
+                with patch(
+                    "data.reporting_service.shutil.which",
+                    return_value=(
+                        "C:\\Users\\Jason\\AppData\\Local\\Packages\\PythonSoftwareFoundation.Python.3.13_qbz5n2kfra8p0"
+                        "\\LocalCache\\local-packages\\Python313\\Scripts\\streamlit.exe"
+                    ),
+                ):
+                    status = pdf_export_status()
 
         self.assertFalse(status["available"])
         self.assertTrue(status["runtime_executable"])
         self.assertIn("pip.exe", status["recommended_install_command"])
+        self.assertIn("kaleido", status["recommended_install_command"])
+        self.assertIn("reportlab", status["missing_dependencies"])
+        self.assertIn("kaleido", status["missing_dependencies"])
 
     def test_municipal_results_helpers_normalize_labels_and_chart_frame(self) -> None:
         """Validate municipal results helpers keep labels and chart rows consistent."""
@@ -451,6 +525,36 @@ class SigamV2SnapshotServiceTests(unittest.TestCase):
         self.assertEqual(chart_df.iloc[0]["service_name"], "Acueducto")
         self.assertEqual(chart_df.iloc[0]["maturity_index"], 3)
         self.assertEqual(chart_df.iloc[1]["maturity_label"], "Avanzado")
+
+    def test_priority_legend_html_renders_badges_without_literal_html(self) -> None:
+        """Validate the priority legend keeps badge HTML as markup, not escaped text."""
+
+        legend_html = _build_priority_legend_html()
+
+        self.assertIn("Necesitan actualización", legend_html)
+        self.assertIn('class="nivel-basico"', legend_html)
+        self.assertNotIn("&lt;span", legend_html)
+
+    def test_service_maturity_chart_can_prefer_inside_text_labels(self) -> None:
+        """Validate export-mode maturity charts place labels inside larger bars."""
+
+        chart_df = _build_service_maturity_frame(
+            [
+                {"service_name": "Acueducto", "level": "Inicial", "needs_update": False},
+                {"service_name": "Aseo", "level": "Avanzado", "needs_update": False},
+            ]
+        )
+
+        figure = madurez_servicios_horizontal(
+            chart_df,
+            prefer_inside_text=True,
+            margin_left=180,
+            margin_right=70,
+        )
+
+        self.assertEqual(list(figure.data[0].textposition), ["outside", "inside"])
+        self.assertEqual(figure.layout.margin.l, 180)
+        self.assertEqual(figure.layout.margin.r, 70)
 
     def test_form_navigation_helper_blocks_only_when_service_is_dirty(self) -> None:
         """Validate clean service navigation can proceed without the dialog."""

@@ -109,13 +109,23 @@ def distribucion_niveles_pie(distribucion: dict, height: int = 360) -> go.Figure
     return _layout_base(fig, height=height)
 
 
-def madurez_servicios_horizontal(df: pd.DataFrame, height: int = 360) -> go.Figure:
+def madurez_servicios_horizontal(
+    df: pd.DataFrame,
+    height: int = 360,
+    prefer_inside_text: bool = False,
+    margin_left: int = 20,
+    margin_right: int = 20,
+) -> go.Figure:
     """Build a horizontal bar chart for public service maturity.
 
     Args:
         df: Service summary rows with ``service_name``, ``maturity_index``,
             and ``predominant_level`` columns.
         height: Figure height in pixels.
+        prefer_inside_text: Whether to place maturity labels inside bars when
+            there is enough room.
+        margin_left: Left layout margin in pixels.
+        margin_right: Right layout margin in pixels.
 
     Returns:
         Plotly horizontal bar chart ordered by maturity.
@@ -123,6 +133,12 @@ def madurez_servicios_horizontal(df: pd.DataFrame, height: int = 360) -> go.Figu
 
     plot_df = df.sort_values(["maturity_index", "service_name"], ascending=[True, True]).copy()
     plot_df["color"] = plot_df["predominant_level"].map(COLORES_NIVEL)
+    text_positions = "outside"
+    if prefer_inside_text:
+        text_positions = [
+            "inside" if value >= 2.25 else "outside"
+            for value in plot_df["maturity_index"]
+        ]
     fig = go.Figure(
         go.Bar(
             x=plot_df["maturity_index"],
@@ -130,7 +146,10 @@ def madurez_servicios_horizontal(df: pd.DataFrame, height: int = 360) -> go.Figu
             orientation="h",
             marker_color=plot_df["color"],
             text=plot_df["predominant_level"],
-            textposition="outside",
+            textposition=text_positions,
+            insidetextanchor="middle",
+            insidetextfont=dict(color="white", size=11),
+            outsidetextfont=dict(color="#1A2636", size=11),
             customdata=plot_df[["maturity_label"]].to_numpy(),
             hovertemplate=(
                 "<b>%{y}</b><br>"
@@ -147,10 +166,12 @@ def madurez_servicios_horizontal(df: pd.DataFrame, height: int = 360) -> go.Figu
             tickvals=[1, 2, 3, 4, 5],
             ticktext=ORDEN_NIVELES,
         ),
-        yaxis=dict(title=""),
+        yaxis=dict(title="", automargin=True, tickfont=dict(size=10)),
         showlegend=False,
     )
-    return _layout_base(fig, height=height)
+    fig = _layout_base(fig, height=height)
+    fig.update_layout(margin=dict(t=30, b=40, l=margin_left, r=margin_right))
+    return fig
 
 
 def radar_ejes(scores_eje: dict, nombre: str = "") -> go.Figure:

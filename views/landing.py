@@ -17,7 +17,7 @@ from components.charts import (
 )
 from components.ui import kpi_card, month_year_selector, page_header
 from data.presentation_service import get_national_snapshot_view
-from data.reporting_service import export_csv, export_pdf, pdf_export_status
+from data.reporting_service import export_csv, export_pdf, pdf_export_status, pdf_unavailable_message
 from data.snapshot import AUDIENCE_PUBLIC
 from data.text_utils import normalized_contains
 
@@ -359,8 +359,4 @@ def show() -> None:
                     width="stretch",
                 )
         else:
-            st.warning(
-                "El PDF formal no está disponible en el entorno actual de Streamlit. "
-                f"Instálelo con: `{pdf_status['recommended_install_command']}`. "
-                f"Runtime activo: `{pdf_status['runtime_executable']}`."
-            )
+            st.warning(pdf_unavailable_message(pdf_status))

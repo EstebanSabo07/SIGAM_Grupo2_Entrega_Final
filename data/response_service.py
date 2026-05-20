@@ -2,14 +2,23 @@
 
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 from typing import Any
 
 from data.catalog_service import get_section_catalog
 from data.snapshot import SnapshotContext
 from data.snapshot_service import resolve_indicator_values
-from database.models import utcnow
 from database.repositories import save_indicator_response_versions
+
+
+def server_now() -> datetime:
+    """Return the current server timestamp with local timezone awareness.
+
+    Returns:
+        Timezone-aware datetime based on the server local clock.
+    """
+
+    return datetime.now().astimezone()
 
 
 def get_section_responses(
@@ -154,7 +163,7 @@ def save_section_changes(
     result = save_indicator_response_versions(
         municipality_code=municipality_code,
         responses=changed_rows,
-        submitted_at=utcnow(),
+        submitted_at=server_now(),
         actor_subject=(actor_context or {}).get("actor_subject"),
     )
     return {
